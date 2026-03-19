@@ -1,0 +1,2767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Timeline App</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://unpkg.com/vis-timeline@7.7.2/styles/vis-timeline-graph2d.min.css" rel="stylesheet" />
+  <script src="https://unpkg.com/vis-timeline@7.7.2/standalone/umd/vis-timeline-graph2d.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    .vis-timeline   { border:none!important; background:transparent!important; }
+    .vis-time-axis  { background:rgba(17,24,39,.88)!important; border-bottom:1px solid #1f2937!important; }
+    .vis-time-axis .vis-text { color:#6b7280!important; font-size:11px!important; }
+    .vis-grid.vis-minor  { border-color:rgba(17,24,39,.5)!important; }
+    .vis-grid.vis-major  { border-color:rgba(31,41,55,.7)!important; }
+    .vis-group       { background:rgba(10,15,30,.55)!important; border-bottom:1px solid rgba(17,24,39,.6)!important; }
+    .vis-label       { background:rgba(17,24,39,.82)!important; border-right:1px solid #1f2937!important; border-bottom:1px solid #1f2937!important; padding:4px 8px!important; min-width:170px!important; }
+    .vis-panel.vis-center { background:transparent!important; }
+    .vis-panel.vis-left   { background:rgba(17,24,39,.82)!important; }
+    .vis-item           { border-radius:5px!important; font-size:11px!important; font-weight:600!important; padding:2px 8px!important; border-width:2px!important; cursor:pointer!important; }
+    .vis-item.vis-box   { border-style:solid!important; }
+    .vis-item.vis-range { border-style:solid!important; border-radius:5px!important; }
+    .vis-item.vis-selected { box-shadow:0 0 0 3px rgba(255,255,255,0.3)!important; }
+    .vis-tooltip { background:#1f2937!important; border:1px solid #374151!important; color:#e5e7eb!important; border-radius:8px!important; padding:8px 12px!important; font-size:12px!important; max-width:220px!important; line-height:1.5!important; box-shadow:0 8px 24px rgba(0,0,0,0.5)!important; }
+
+    /* Data grid */
+    .dg-table { width:100%; border-collapse:collapse; font-size:12px; }
+    .dg-table th { background:#111827; color:#6b7280; font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.05em; padding:8px 10px; text-align:left; border-bottom:2px solid #1f2937; position:sticky; top:0; z-index:1; white-space:nowrap; }
+    .dg-table td { padding:0; border-bottom:1px solid #1f2937; vertical-align:middle; }
+    .dg-cell { padding:7px 10px; color:#e5e7eb; min-height:33px; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:text; }
+    .dg-cell:hover { background:#1a2234; }
+    .dg-cell.editing { padding:0; }
+    .dg-input { width:100%; padding:7px 10px; background:#1f2937; border:none; outline:2px solid #6366f1; color:#f9fafb; font-size:12px; font-family:inherit; box-sizing:border-box; }
+    .dg-select { width:100%; padding:7px 10px; background:#1f2937; border:none; outline:2px solid #6366f1; color:#f9fafb; font-size:12px; font-family:inherit; box-sizing:border-box; }
+    .dg-row:hover .dg-del { opacity:1; }
+    .dg-del { opacity:0; background:none; border:none; color:#ef4444; cursor:pointer; padding:2px 6px; font-size:14px; transition:opacity .1s; }
+    .drop-zone { border:2px dashed #374151; border-radius:10px; padding:28px; text-align:center; color:#6b7280; cursor:pointer; transition:border-color .15s,background .15s; }
+    .drop-zone.drag-over { border-color:#6366f1; background:#1f293744; color:#a5b4fc; }
+
+    ::-webkit-scrollbar { width:5px; height:5px; }
+    ::-webkit-scrollbar-track { background:#111827; }
+    ::-webkit-scrollbar-thumb { background:#374151; border-radius:3px; }
+    ::-webkit-scrollbar-thumb:hover { background:#4b5563; }
+    body { font-family:'Inter','Segoe UI',system-ui,sans-serif; }
+    .img-thumb { width:100%; aspect-ratio:4/3; object-fit:cover; border-radius:5px; border:1px solid #374151; display:block; cursor:pointer; }
+    .img-thumb:hover { opacity:.85; }
+  </style>
+</head>
+<body class="h-screen overflow-hidden" style="background:#0a0f1e;color:#f9fafb;">
+  <div id="root" class="h-full"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+// ─── Date Helpers ─────────────────────────────────────────────────────────────
+const makeYear = (year, month = 6, day = 1) => {
+  const d = new Date(0); d.setFullYear(year, month - 1, day); return d;
+};
+const dateForVis = d => (d == null ? undefined : typeof d === 'number' ? makeYear(d) : d);
+const toSortYear = d => typeof d === 'number' ? d : parseInt(String(d));
+
+// Month abbreviations for full-date format
+const MONTH_ABR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// Core date formatter — fmt: 'bcad' | 'signed' | 'full'
+const fmtDate = (d, fmt = 'bcad') => {
+  if (d == null) return '';
+  if (typeof d === 'number') {
+    if (fmt === 'signed') return String(d);
+    if (d <= 0) return `${Math.abs(d)} BC`;
+    return d < 1000 ? `${d} AD` : String(d);
+  }
+  // ISO string  e.g. "1867-11-07"
+  const s = String(d);
+  const yr = parseInt(s.slice(0, 4));
+  if (fmt === 'full') {
+    const mm = parseInt(s.slice(5, 7)) - 1; // 0-based
+    const dd = parseInt(s.slice(8, 10));
+    if (!isNaN(mm) && !isNaN(dd) && s.length >= 10) return `${dd} ${MONTH_ABR[mm]} ${yr}`;
+  }
+  return String(yr); // 'bcad' and 'signed' → just year for ISO dates
+};
+
+// ─── Date Format Context ───────────────────────────────────────────────────────
+const DateFmtCtx = React.createContext('bcad');
+// Hook: returns a bound fmtDate(d) that uses current context format
+const useFmt = () => { const fmt = React.useContext(DateFmtCtx); return d => fmtDate(d, fmt); };
+
+// Date format options for the picker
+const DATE_FMTS = [
+  { value:'bcad',   label:'BC / AD',     example:'4 BC · 33 AD · 1867' },
+  { value:'signed', label:'Signed year', example:'-4 · 33 · 1867' },
+  { value:'full',   label:'Full date',   example:'7 Nov 1867 · 4 BC' },
+];
+
+// Parse a date value from user text input
+// Accepts: "4 BC", "33 AD", "-4", "1867", "1867-11-07", "25/12/1867", "25/12/33 AD", "25/12/4 BC"
+const parseDate = (s) => {
+  if (!s || !String(s).trim()) return undefined;
+  const t = String(s).trim();
+
+  // Already an ISO date string (yyyy-mm-dd…)
+  if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t;
+
+  // dd/mm/yyyy  or  dd/mm/yyyy BC  or  dd/mm/yyyy AD
+  const dmy = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{1,4})\s*(BC|AD)?$/i);
+  if (dmy) {
+    const [, dd, mm, yyyy, era] = dmy;
+    const yr = parseInt(yyyy);
+    const signed = (era && era.toUpperCase() === 'BC') ? -Math.abs(yr) : yr;
+    // If it has a real day/month, store as ISO-like string; keep year negative for BC
+    const absYr = Math.abs(signed);
+    const isoStr = `${String(absYr).padStart(4,'0')}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`;
+    // Return integer year for BC (no standard ISO for negative years), full ISO for AD
+    if (signed <= 0) return signed; // BC stored as integer year
+    return isoStr;
+  }
+
+  // "4 BC" or "4BC"  →  -4
+  const bc = t.match(/^(\d{1,4})\s*BC$/i);
+  if (bc) return -Math.abs(parseInt(bc[1]));
+
+  // "33 AD" or "33AD"  →  33
+  const ad = t.match(/^(\d{1,4})\s*AD$/i);
+  if (ad) return parseInt(ad[1]);
+
+  // Plain negative integer: -4
+  if (/^-\d{1,4}$/.test(t)) return parseInt(t);
+
+  // Plain positive integer: 1867
+  if (/^\d{1,4}$/.test(t)) return parseInt(t);
+
+  return t; // fallback — keep as-is
+};
+
+// Human-readable display of a stored date value (for grid/panel)
+const displayDate = (d) => {
+  if (d == null) return '';
+  if (typeof d === 'number') return d <= 0 ? `${Math.abs(d)} BC` : `${d} AD`;
+  return String(d); // ISO string
+};
+
+// ─── Image Helper ─────────────────────────────────────────────────────────────
+const resizeImage = (file, maxW, maxH, quality = 0.85) => new Promise((resolve, reject) => {
+  if (file.type === 'image/svg+xml') {
+    const r = new FileReader(); r.onload = e => resolve(e.target.result); r.onerror = reject; r.readAsDataURL(file); return;
+  }
+  const isPNG = file.type === 'image/png';
+  const r = new FileReader();
+  r.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
+      const w = Math.round(img.width * ratio), h = Math.round(img.height * ratio);
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+      const ctx = cv.getContext('2d');
+      if (!isPNG) { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); }
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(cv.toDataURL(isPNG ? 'image/png' : 'image/jpeg', quality));
+    };
+    img.onerror = reject; img.src = e.target.result;
+  };
+  r.onerror = reject; r.readAsDataURL(file);
+});
+
+// ─── CSV Helpers ──────────────────────────────────────────────────────────────
+// Parse one CSV line handling quoted fields with embedded commas
+const parseCSVLine = (line) => {
+  const out = []; let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] === '"' && line[i+1] === '"') { cur += '"'; i++; }
+    else if (line[i] === '"') inQ = !inQ;
+    else if (line[i] === ',' && !inQ) { out.push(cur); cur = ''; }
+    else cur += line[i];
+  }
+  out.push(cur); return out;
+};
+
+const parseCSV = (text) => {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim().split('\n').filter(l => l.trim());
+  if (lines.length < 2) return { headers: [], rows: [] };
+  const headers = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase());
+  const rows = lines.slice(1).map(l => {
+    const vals = parseCSVLine(l);
+    const obj = {}; headers.forEach((h, i) => obj[h] = (vals[i] || '').trim()); return obj;
+  });
+  return { headers, rows };
+};
+
+const toCSVValue = v => {
+  const s = String(v ?? '');
+  return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+
+const buildCSV = (headers, rows) =>
+  [headers.join(','), ...rows.map(r => headers.map(h => toCSVValue(r[h] ?? '')).join(','))].join('\n');
+
+const downloadText = (content, filename, mime = 'text/csv') => {
+  const url = URL.createObjectURL(new Blob([content], { type: mime }));
+  Object.assign(document.createElement('a'), { href: url, download: filename }).click();
+  URL.revokeObjectURL(url);
+};
+
+const PEOPLE_HEADERS  = ['id','name','birth','death','role','color'];
+const EVENTS_HEADERS  = ['id','title','date_start','date_end','description','category','person_ids'];
+const PEOPLE_TEMPLATE = `id,name,birth,death,role,color\n,Jesus of Nazareth,-4,33,Religious figure,#c084fc\n,Marie Curie,1867,1934,Physicist,#22d3ee`;
+const EVENTS_TEMPLATE = `id,title,date_start,date_end,description,category,person_ids\n,Birth in Bethlehem,-4,,Description here,Religion,\n,World War II,1939,1945,Deadliest conflict in history,Historical,`;
+
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+
+// Convert app people array → CSV rows
+const peopleToCsvRows  = ps => ps.map(p => ({ id: p.id, name: p.name, birth: displayDate(p.birth), death: displayDate(p.death), role: p.role || '', color: p.color || '' }));
+const eventsToCsvRows  = es => es.map(e => ({ id: e.id, title: e.title, date_start: displayDate(e.date_start), date_end: displayDate(e.date_end), description: e.description || '', category: e.category || '', person_ids: (e.person_ids || []).join('|') }));
+
+// Convert CSV rows → app people/events
+const csvRowToPerson = (row, existing = []) => ({
+  id:       row.id || ('p' + uid()),
+  name:     row.name || 'Unnamed',
+  birth:    parseDate(row.birth),
+  death:    parseDate(row.death),
+  role:     row.role || '',
+  color:    row.color || '#818cf8',
+  initials: (row.name || 'XX').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
+  photo:    existing.find(p => p.id === row.id)?.photo || null,
+});
+const csvRowToEvent = (row, existing = []) => ({
+  id:         row.id ? (isNaN(row.id) ? row.id : Number(row.id)) : uid(),
+  title:      row.title || 'Untitled',
+  date_start: parseDate(row.date_start),
+  date_end:   parseDate(row.date_end) || undefined,
+  description:row.description || '',
+  category:   row.category || 'Historical',
+  person_ids: row.person_ids ? row.person_ids.split(/[|,]/).map(s => s.trim()).filter(Boolean) : [],
+  images:     existing.find(e => String(e.id) === String(row.id))?.images || [],
+});
+
+// ─── LocalStorage ─────────────────────────────────────────────────────────────
+const LS_KEY = 'timeline_app_v1';
+const loadSaves         = () => { try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { return []; } };
+const writeSaves        = arr => localStorage.setItem(LS_KEY, JSON.stringify(arr));
+const deleteFromStorage = name => writeSaves(loadSaves().filter(s => s.name !== name));
+const saveToStorage     = (name, people, events, eras = [], bgSettings = null) => {
+  const saves = loadSaves(), idx = saves.findIndex(s => s.name === name);
+  const entry = { name, savedAt: new Date().toISOString(), people, events, eras, bgSettings };
+  if (idx >= 0) saves[idx] = entry; else saves.push(entry); writeSaves(saves);
+};
+const exportJSON = (name, people, events, eras = [], bgSettings = null) => {
+  const url = URL.createObjectURL(new Blob([JSON.stringify({ name, version: 1, savedAt: new Date().toISOString(), people, events, eras, bgSettings }, null, 2)], { type: 'application/json' }));
+  Object.assign(document.createElement('a'), { href: url, download: `${name || 'timeline'}.json` }).click();
+  URL.revokeObjectURL(url);
+};
+
+// ─── Sample Data ──────────────────────────────────────────────────────────────
+const SAMPLE_PEOPLE = [
+  { id:'p6', name:'Jesus of Nazareth', birth:-4,           death:33,           color:'#c084fc', initials:'JC', role:'Religious figure', photo:null },
+  { id:'p2', name:'Marie Curie',        birth:'1867-11-07', death:'1934-07-04', color:'#22d3ee', initials:'MC', role:'Physicist',         photo:null },
+  { id:'p3', name:'Winston Churchill',  birth:'1874-11-30', death:'1965-01-24', color:'#f87171', initials:'WC', role:'Prime Minister',    photo:null },
+  { id:'p4', name:'Amelia Earhart',     birth:'1897-07-24', death:'1937-07-02', color:'#fbbf24', initials:'AE', role:'Aviator',          photo:null },
+  { id:'p5', name:'Albert Einstein',    birth:'1879-03-14', death:'1955-04-18', color:'#4ade80', initials:'EI', role:'Physicist',         photo:null },
+];
+const SAMPLE_EVENTS = [
+  { id:21, title:'Birth of Jesus',              date_start:-4,           description:'Jesus is born in Bethlehem. Historians estimate the birth between 6 and 4 BC.', category:'Religion',  person_ids:['p6'], images:[] },
+  { id:22, title:'Flight to Egypt',              date_start:-3,           description:"Joseph and Mary flee to Egypt with the infant Jesus to escape Herod's massacre.", category:'Religion',  person_ids:['p6'], images:[] },
+  { id:23, title:'Baptism by John the Baptist',  date_start:29,           description:'Jesus is baptised by John in the Jordan River, marking the start of his public ministry.', category:'Religion',  person_ids:['p6'], images:[] },
+  { id:24, title:'Public Ministry',              date_start:29, date_end:33, description:'Three years of teaching, healing, and miracles across Galilee, Judea, and Samaria.', category:'Religion',  person_ids:['p6'], images:[] },
+  { id:25, title:'Sermon on the Mount',          date_start:30,           description:"Jesus delivers the Beatitudes, Lord's Prayer, and core ethical teachings.", category:'Religion',  person_ids:['p6'], images:[] },
+  { id:26, title:'Last Supper',                  date_start:33,           description:'Jesus shares a final Passover meal with his twelve apostles, instituting the Eucharist.', category:'Religion',  person_ids:['p6'], images:[] },
+  { id:27, title:'Crucifixion',                  date_start:33,           description:'Jesus is crucified at Golgotha outside Jerusalem. Historians date this between 30–33 AD.', category:'Religion',  person_ids:['p6'], images:[] },
+  { id: 2, title:'Curie discovers Radium',       date_start:'1898-12-26', description:'Marie and Pierre Curie announce the discovery of radium.', category:'Science',   person_ids:['p2'], images:[] },
+  { id: 4, title:'Curie: Nobel Prize Physics',   date_start:'1903-12-10', description:'Marie Curie becomes the first woman to win the Nobel Prize.', category:'Award',     person_ids:['p2'], images:[] },
+  { id:14, title:'Curie: Second Nobel Prize',    date_start:'1911-12-10', description:'Curie wins Nobel in Chemistry — first person to win two Nobel Prizes.', category:'Award',     person_ids:['p2'], images:[] },
+  { id:18, title:'Curie: Mobile X-ray units',    date_start:'1914-08-01', date_end:'1918-11-11', description:'Curie develops mobile field X-ray stations for WWI battlefronts.', category:'Science',   person_ids:['p2'], images:[] },
+  { id: 5, title:"Churchill: Prime Minister",    date_start:'1940-05-10', description:'Winston Churchill appointed Prime Minister of the UK at the height of WWII.', category:'Politics',  person_ids:['p3'], images:[] },
+  { id: 7, title:'World War II',                 date_start:'1939-09-01', date_end:'1945-09-02', description:'The deadliest conflict in human history spanning six years.', category:'Historical',person_ids:['p3'], images:[] },
+  { id:13, title:"Churchill: 'We Shall Fight'",  date_start:'1940-06-04', description:"Churchill's iconic speech rallied Britain against Nazi Germany.", category:'Politics',  person_ids:['p3'], images:[] },
+  { id:19, title:"Churchill: 'Iron Curtain'",    date_start:'1946-03-05', description:"Churchill coins 'Iron Curtain' at Westminster College, Missouri.", category:'Politics',  person_ids:['p3'], images:[] },
+  { id: 6, title:'Earhart: Solo Atlantic',       date_start:'1932-05-20', description:'Amelia Earhart becomes the first female aviator to fly solo nonstop across the Atlantic.', category:'Aviation',  person_ids:['p4'], images:[] },
+  { id:11, title:'Earhart disappears',           date_start:'1937-07-02', description:'Earhart and Fred Noonan vanish over the Pacific on a round-the-world attempt.', category:'Aviation',  person_ids:['p4'], images:[] },
+  { id:17, title:'Earhart: First transatlantic', date_start:'1928-06-18', description:'Earhart becomes the first woman to cross the Atlantic by air, as a passenger.', category:'Aviation',  person_ids:['p4'], images:[] },
+  { id: 3, title:'Theory of Special Relativity', date_start:'1905-06-30', description:"Einstein's annus mirabilis paper reshapes our understanding of space and time.", category:'Science',   person_ids:['p5'], images:[] },
+  { id: 8, title:'Einstein emigrates to USA',    date_start:'1933-10-17', description:'Einstein settles in Princeton, NJ after fleeing Nazi Germany.', category:'Personal',  person_ids:['p5'], images:[] },
+  { id:12, title:'Einstein: Nobel Prize Physics',date_start:'1921-11-09', description:'Einstein awarded Nobel Prize for the photoelectric effect.', category:'Award',     person_ids:['p5'], images:[] },
+  { id:16, title:'Theory of General Relativity', date_start:'1915-11-25', description:'Einstein presents general relativity to the Prussian Academy of Sciences.', category:'Science',   person_ids:['p5'], images:[] },
+];
+
+const CATEGORY_COLORS = { Religion:'#c084fc', Politics:'#818cf8', Science:'#34d399', Aviation:'#fbbf24', Historical:'#a78bfa', Award:'#f472b6', Personal:'#94a3b8' };
+const ALL_CATEGORIES  = Object.keys(CATEGORY_COLORS);
+
+// ─── Shared atoms ─────────────────────────────────────────────────────────────
+const Avatar = ({ person, size = 32, dim = false, onUpload = null }) => {
+  const fileRef = useRef(null);
+  const [hov, setHov] = useState(false);
+  const handleFile = async e => {
+    const f = e.target.files[0]; if (!f || !onUpload) return;
+    try { onUpload(person.id, await resizeImage(f, 300, 300)); } catch { alert('Could not load image.'); }
+    e.target.value = '';
+  };
+  return (
+    <div style={{ position:'relative', width:size, height:size, flexShrink:0, cursor:onUpload?'pointer':'default' }}
+      onClick={() => onUpload && fileRef.current?.click()}
+      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}>
+      {person.photo
+        ? <img src={person.photo} style={{ width:size, height:size, borderRadius:'50%', objectFit:'cover', display:'block', border:`2px solid ${person.color}` }} />
+        : <div style={{ width:size, height:size, borderRadius:'50%', background:dim?'#374151':person.color, display:'flex', alignItems:'center', justifyContent:'center', fontSize:Math.round(size*.34), fontWeight:700, color:'white' }}>{person.initials}</div>
+      }
+      {onUpload && hov && <div style={{ position:'absolute', inset:0, borderRadius:'50%', background:'rgba(0,0,0,.55)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:Math.round(size*.38) }}>📷</div>}
+      {onUpload && <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} style={{ display:'none' }} />}
+    </div>
+  );
+};
+
+const CategoryDot = ({ category, size=8 }) => <div style={{ width:size, height:size, borderRadius:2, background:CATEGORY_COLORS[category]||'#6b7280', flexShrink:0 }} />;
+const Badge = ({ category }) => <span style={{ background:(CATEGORY_COLORS[category]||'#6b7280')+'22', color:CATEGORY_COLORS[category]||'#9ca3af', border:`1px solid ${(CATEGORY_COLORS[category]||'#6b7280')}44`, borderRadius:4, padding:'2px 7px', fontSize:11, fontWeight:600 }}>{category}</span>;
+
+const Btn = ({ onClick, children, primary, danger, small, style = {} }) => (
+  <button onClick={onClick} style={{
+    fontSize: small ? 11 : 12, padding: small ? '3px 9px' : '5px 12px', borderRadius: 6, border: '1px solid',
+    borderColor: primary ? 'transparent' : danger ? '#7f1d1d' : '#374151',
+    background: primary ? '#4f46e5' : danger ? '#450a0a' : 'none',
+    color: primary ? 'white' : danger ? '#f87171' : '#9ca3af',
+    cursor: 'pointer', fontWeight: primary ? 600 : 400, ...style,
+  }}
+    onMouseEnter={e => { e.currentTarget.style.opacity = '.8'; }}
+    onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}>
+    {children}
+  </button>
+);
+
+// ─── Modal wrapper ─────────────────────────────────────────────────────────────
+const Modal = ({ title, onClose, children, width = 440 }) => (
+  <div onClick={e => e.target === e.currentTarget && onClose()}
+    style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.78)', zIndex:100, display:'flex', alignItems:'center', justifyContent:'center' }}>
+    <div style={{ background:'#111827', border:'1px solid #374151', borderRadius:12, padding:24, width, maxWidth:'94vw', maxHeight:'88vh', display:'flex', flexDirection:'column' }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18 }}>
+        <h2 style={{ fontSize:15, fontWeight:600, color:'#f9fafb', margin:0 }}>{title}</h2>
+        <button onClick={onClose} style={{ color:'#6b7280', fontSize:22, lineHeight:1, background:'none', border:'none', cursor:'pointer' }}>×</button>
+      </div>
+      <div style={{ flex:1, overflowY:'auto' }}>{children}</div>
+    </div>
+  </div>
+);
+
+const Lightbox = ({ src, onClose }) => {
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x:0, y:0 });
+  const [dragging, setDragging] = useState(false);
+  const dragStart = useRef(null);
+
+  const handleWheel = e => {
+    e.preventDefault();
+    setScale(s => Math.max(0.5, Math.min(10, s * (e.deltaY < 0 ? 1.15 : 0.87))));
+  };
+  const handleMouseDown = e => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    setDragging(true);
+    dragStart.current = { x: e.clientX - offset.x, y: e.clientY - offset.y };
+  };
+  const handleMouseMove = e => {
+    if (!dragging || !dragStart.current) return;
+    setOffset({ x: e.clientX - dragStart.current.x, y: e.clientY - dragStart.current.y });
+  };
+  const handleMouseUp = () => { setDragging(false); dragStart.current = null; };
+  const resetZoom = () => { setScale(1); setOffset({ x:0, y:0 }); };
+
+  return (
+    <div
+      onWheel={handleWheel}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      onClick={e => { if (e.target === e.currentTarget && scale <= 1) onClose(); }}
+      style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.93)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', cursor: scale > 1 ? (dragging ? 'grabbing' : 'grab') : 'default' }}>
+      <button onClick={onClose} style={{ position:'absolute', top:16, right:20, color:'#9ca3af', background:'none', border:'none', fontSize:30, cursor:'pointer', zIndex:1 }}>×</button>
+      {/* Zoom indicator + controls */}
+      <div style={{ position:'absolute', bottom:20, left:'50%', transform:'translateX(-50%)', display:'flex', alignItems:'center', gap:8, background:'rgba(0,0,0,.6)', borderRadius:20, padding:'5px 12px', zIndex:1 }}>
+        <button onClick={() => setScale(s => Math.max(0.5, s * 0.8))} style={{ background:'none', border:'none', color:'#9ca3af', fontSize:16, cursor:'pointer', lineHeight:1, padding:'0 2px' }}>−</button>
+        <span style={{ fontSize:12, color:'#9ca3af', minWidth:40, textAlign:'center' }}>{Math.round(scale*100)}%</span>
+        <button onClick={() => setScale(s => Math.min(10, s * 1.25))} style={{ background:'none', border:'none', color:'#9ca3af', fontSize:16, cursor:'pointer', lineHeight:1, padding:'0 2px' }}>+</button>
+        {scale !== 1 && <button onClick={resetZoom} style={{ background:'none', border:'none', color:'#6b7280', fontSize:10, cursor:'pointer', marginLeft:4 }}>Reset</button>}
+      </div>
+      <div style={{ position:'absolute', bottom:54, left:'50%', transform:'translateX(-50%)', color:'#4b5563', fontSize:11 }}>Scroll to zoom · Drag to pan</div>
+      <img
+        src={src}
+        onMouseDown={handleMouseDown}
+        onDoubleClick={resetZoom}
+        draggable={false}
+        style={{
+          maxWidth: scale <= 1 ? '92vw' : 'none',
+          maxHeight: scale <= 1 ? '90vh' : 'none',
+          objectFit:'contain',
+          borderRadius:6,
+          transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+          transformOrigin:'center center',
+          transition: dragging ? 'none' : 'transform .1s',
+          userSelect:'none',
+          pointerEvents:'all',
+          cursor: scale > 1 ? (dragging ? 'grabbing' : 'grab') : 'zoom-in',
+        }}
+      />
+    </div>
+  );
+};
+
+// ─── Era / Background Section helpers ──────────────────────────────────────────
+// era: { id, label, yearStart, yearEnd (null=∞), color (label accent), bg: BgSettings }
+const DEFAULT_ERA_BG = { type:'solid', color:'#1a1f2e', color2:'#2d3748', dir:'to right', photo:null };
+const DEFAULT_ERAS = [];
+const ERA_PRESETS = [
+  { label:'Ancient',      yearStart:-3000, yearEnd:500,  color:'#a78bfa', bg:{ type:'solid', color:'#1e0a38', color2:'#2d1b4e', dir:'to right', photo:null } },
+  { label:'Medieval',     yearStart:500,   yearEnd:1500, color:'#34d399', bg:{ type:'solid', color:'#0a2018', color2:'#0d2d1a', dir:'to right', photo:null } },
+  { label:'Early Modern', yearStart:1500,  yearEnd:1800, color:'#60a5fa', bg:{ type:'solid', color:'#0a1525', color2:'#0f1e35', dir:'to right', photo:null } },
+  { label:'Industrial',   yearStart:1800,  yearEnd:1914, color:'#fbbf24', bg:{ type:'solid', color:'#1f1205', color2:'#291808', dir:'to right', photo:null } },
+  { label:'Modern',       yearStart:1914,  yearEnd:null, color:'#f87171', bg:{ type:'solid', color:'#1a0505', color2:'#260808', dir:'to right', photo:null } },
+];
+
+// ─── Era / Background Section Editor Modal ─────────────────────────────────────
+const EraEditorModal = ({ eras, onSave, onClose }) => {
+  // Ensure any legacy eras without bg get a default bg
+  const [list, setList] = useState(eras.map(e => ({ bg: { ...DEFAULT_ERA_BG }, ...e })));
+  const [expanded, setExpanded] = useState(null); // era id whose bg editor is open
+  const fileRefs = useRef({});
+
+  const addPreset = p => setList(l => [...l, { id:uid(), bg:{ ...DEFAULT_ERA_BG }, ...p }]);
+  const addBlank  = () => setList(l => [...l, { id:uid(), label:'New Section', yearStart:1, yearEnd:null, color:'#6366f1', bg:{ ...DEFAULT_ERA_BG } }]);
+  const del = id  => setList(l => l.filter(e => e.id !== id));
+  const upd = (id, k, v) => setList(l => l.map(e => e.id===id ? { ...e, [k]:v } : e));
+  const updBg = (id, k, v) => setList(l => l.map(e => e.id===id ? { ...e, bg:{ ...e.bg, [k]:v } } : e));
+
+  const fld = (s={}) => ({ fontSize:12, background:'#0d1117', border:'1px solid #374151', borderRadius:6, color:'#f9fafb', outline:'none', ...s });
+
+  const TypeBtn = ({ eraId, val, label, cur }) => (
+    <button onClick={() => updBg(eraId,'type',val)} style={{
+      padding:'4px 11px', borderRadius:5, border:'1px solid', fontSize:11, cursor:'pointer',
+      borderColor: cur===val ? '#6366f1' : '#374151',
+      background:  cur===val ? '#6366f122' : 'none',
+      color:       cur===val ? '#a5b4fc'   : '#6b7280',
+    }}>{label}</button>
+  );
+
+  return (
+    <Modal title="Background Sections" onClose={onClose} width={700}>
+      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+
+        {/* Help */}
+        <div style={{ fontSize:12, color:'#9ca3af', background:'#1a2234', borderRadius:8, padding:'10px 14px', lineHeight:1.6 }}>
+          Each section covers a time range and gets its own background (colour, gradient, or photo).
+          Click <strong style={{ color:'#e5e7eb' }}>🎨</strong> on a section to set its background.
+          The <strong style={{ color:'#e5e7eb' }}>Default BG</strong> button in the toolbar fills any uncovered time.
+        </div>
+
+        {/* Presets */}
+        <div>
+          <div style={{ fontSize:11, color:'#6b7280', marginBottom:6 }}>Quick-add a preset section:</div>
+          <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+            {ERA_PRESETS.map(p => (
+              <button key={p.label} onClick={() => addPreset(p)}
+                style={{ fontSize:11, padding:'3px 10px', borderRadius:5, border:'1px solid #374151', background:'none', color:'#9ca3af', cursor:'pointer' }}>
+                <span style={{ display:'inline-block', width:10, height:10, borderRadius:2, background:bgToCss(p.bg), border:'1px solid #374151', marginRight:5, verticalAlign:'middle' }} />
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Section rows */}
+        <div style={{ overflowY:'auto', maxHeight:420, display:'flex', flexDirection:'column', gap:6 }}>
+          {list.length===0 && <div style={{ fontSize:12, color:'#4b5563', padding:'12px 0' }}>No sections yet. Add a preset or a blank section.</div>}
+          {list.map(era => {
+            const isOpen = expanded === era.id;
+            const bg = era.bg || DEFAULT_ERA_BG;
+            return (
+              <div key={era.id} style={{ borderRadius:8, border:`1px solid ${isOpen ? '#4b5563' : '#1f2937'}`, overflow:'hidden' }}>
+
+                {/* ── Header row ── */}
+                <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', background:'#1a2234' }}>
+                  {/* Background preview swatch */}
+                  <div style={{ width:34, height:26, borderRadius:4, background:bgToCss(bg), flexShrink:0, border:'1px solid #374151' }} />
+                  {/* Label */}
+                  <input value={era.label} onChange={e => upd(era.id,'label',e.target.value)} placeholder="Label"
+                    style={{ ...fld(), width:120, padding:'4px 8px' }} />
+                  {/* Years */}
+                  <input value={era.yearStart} onChange={e => upd(era.id,'yearStart', isNaN(parseInt(e.target.value)) ? e.target.value : parseInt(e.target.value))}
+                    placeholder="Start" style={{ ...fld(), width:70, padding:'4px 8px' }} />
+                  <span style={{ fontSize:11, color:'#4b5563', flexShrink:0 }}>→</span>
+                  <input value={era.yearEnd ?? ''} onChange={e => upd(era.id,'yearEnd', e.target.value==='' ? null : isNaN(parseInt(e.target.value)) ? null : parseInt(e.target.value))}
+                    placeholder="End (blank=∞)" style={{ ...fld(), width:95, padding:'4px 8px' }} />
+                  {/* Label accent colour */}
+                  <input type="color" value={era.color} onChange={e => upd(era.id,'color',e.target.value)} title="Label text colour"
+                    style={{ width:26, height:26, border:'none', borderRadius:4, cursor:'pointer', padding:2, background:'none', flexShrink:0 }} />
+                  <div style={{ flex:1 }} />
+                  {/* Toggle bg editor */}
+                  <button onClick={() => setExpanded(isOpen ? null : era.id)}
+                    style={{ fontSize:11, padding:'3px 11px', borderRadius:5, border:'1px solid #374151', background: isOpen ? '#1f2937' : 'none', color: isOpen ? '#a5b4fc' : '#6b7280', cursor:'pointer', flexShrink:0 }}>
+                    🎨 {isOpen ? '▲' : '▼'}
+                  </button>
+                  <button onClick={() => del(era.id)} style={{ fontSize:13, color:'#6b7280', background:'none', border:'none', cursor:'pointer', padding:'2px 6px', flexShrink:0 }}>✕</button>
+                </div>
+
+                {/* ── Expanded background editor ── */}
+                {isOpen && (
+                  <div style={{ padding:'14px 16px', background:'#111827', borderTop:'1px solid #1f2937' }}>
+                    {/* Type buttons */}
+                    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
+                      <span style={{ fontSize:11, color:'#6b7280', flexShrink:0 }}>Background type:</span>
+                      <TypeBtn eraId={era.id} val="solid"    label="Solid colour" cur={bg.type} />
+                      <TypeBtn eraId={era.id} val="gradient" label="Gradient"     cur={bg.type} />
+                      <TypeBtn eraId={era.id} val="photo"    label="Photo"        cur={bg.type} />
+                    </div>
+
+                    {/* ── Solid ── */}
+                    {bg.type === 'solid' && (
+                      <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:12 }}>
+                        <span style={{ fontSize:11, color:'#9ca3af', width:65 }}>Colour</span>
+                        <input type="color" value={bg.color} onChange={e => updBg(era.id,'color',e.target.value)}
+                          style={{ width:40, height:30, border:'none', borderRadius:5, cursor:'pointer', padding:2, background:'none' }} />
+                        <span style={{ fontSize:11, color:'#6b7280' }}>{bg.color}</span>
+                      </div>
+                    )}
+
+                    {/* ── Gradient ── */}
+                    {bg.type === 'gradient' && (
+                      <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:12 }}>
+                        {[['color','Colour 1'],['color2','Colour 2']].map(([key,lbl]) => (
+                          <div key={key} style={{ display:'flex', alignItems:'center', gap:12 }}>
+                            <span style={{ fontSize:11, color:'#9ca3af', width:65 }}>{lbl}</span>
+                            <input type="color" value={bg[key]||'#1a1f2e'} onChange={e => updBg(era.id,key,e.target.value)}
+                              style={{ width:40, height:30, border:'none', borderRadius:5, cursor:'pointer', padding:2, background:'none' }} />
+                            <span style={{ fontSize:11, color:'#6b7280' }}>{bg[key]}</span>
+                          </div>
+                        ))}
+                        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                          <span style={{ fontSize:11, color:'#9ca3af', width:65 }}>Direction</span>
+                          <select value={bg.dir||'to right'} onChange={e => updBg(era.id,'dir',e.target.value)}
+                            style={{ padding:'4px 10px', background:'#1f2937', border:'1px solid #374151', borderRadius:5, color:'#e5e7eb', fontSize:11 }}>
+                            {BG_DIRS.map(d => <option key={d} value={d}>{d}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Photo ── */}
+                    {bg.type === 'photo' && (
+                      <div style={{ marginBottom:12 }}>
+                        {bg.photo
+                          ? <div style={{ position:'relative', borderRadius:6, overflow:'hidden', marginBottom:8 }}>
+                              <img src={bg.photo} style={{ width:'100%', height:90, objectFit:'cover', display:'block' }} />
+                              <button onClick={() => updBg(era.id,'photo',null)}
+                                style={{ position:'absolute', top:5, right:5, background:'rgba(0,0,0,.7)', border:'none', color:'white', borderRadius:4, padding:'2px 8px', cursor:'pointer', fontSize:11 }}>Remove</button>
+                            </div>
+                          : <div className="drop-zone" onClick={() => fileRefs.current[era.id]?.click()} style={{ padding:'14px 0', marginBottom:8 }}>
+                              <div style={{ fontSize:20, marginBottom:4 }}>🖼</div>
+                              <div style={{ fontSize:13 }}>Click to choose a photo for <em>{era.label}</em></div>
+                              <div style={{ fontSize:10, marginTop:3 }}>Auto-resized to 1920×1080</div>
+                            </div>
+                        }
+                        <input ref={el => fileRefs.current[era.id]=el} type="file" accept="image/*"
+                          onChange={e => { const f=e.target.files[0]; if(f) resizeImage(f,1920,1080,.88).then(url=>updBg(era.id,'photo',url)); e.target.value=''; }}
+                          style={{ display:'none' }} />
+                      </div>
+                    )}
+
+                    {/* Preview strip */}
+                    <div style={{ height:30, borderRadius:6, background:bgToCss(bg), border:'1px solid #374151' }} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ display:'flex', gap:8 }}>
+          <Btn small onClick={addBlank}>+ Add section</Btn>
+          <div style={{ flex:1 }} />
+          <Btn onClick={onClose}>Cancel</Btn>
+          <Btn primary onClick={() => { onSave(list); onClose(); }}>Apply</Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+// ─── Background helpers ────────────────────────────────────────────────────────
+// bgSettings shape: { type:'solid'|'gradient'|'photo', color:'#0a0f1e', color2:'#1a2044', dir:'to right', photo:null }
+const DEFAULT_BG = { type:'solid', color:'#0a0f1e', color2:'#1a2044', dir:'to bottom right', photo:null };
+const bgToCss = (bg) => {
+  if (!bg) return '#0a0f1e';
+  if (bg.type === 'photo' && bg.photo) return `url('${bg.photo}') center/cover no-repeat`;
+  if (bg.type === 'gradient') return `linear-gradient(${bg.dir}, ${bg.color}, ${bg.color2})`;
+  return bg.color;
+};
+const BG_DIRS = ['to right','to left','to bottom','to top','to bottom right','to bottom left','to top right','to top left'];
+
+// ─── Background Settings Modal ─────────────────────────────────────────────────
+const BgSettingsModal = ({ bg, onSave, onClose }) => {
+  const [draft, setDraft] = useState({ ...DEFAULT_BG, ...bg });
+  const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
+  const fileRef = useRef(null);
+
+  const handlePhoto = e => {
+    const f = e.target.files[0]; if (!f) return;
+    resizeImage(f, 1920, 1080, 0.88).then(url => set('photo', url));
+    e.target.value = '';
+  };
+
+  const rowStyle = { display:'flex', alignItems:'center', gap:10, marginBottom:14 };
+  const labelStyle = { fontSize:12, color:'#9ca3af', width:90, flexShrink:0 };
+  const typeBtn = (val, label) => (
+    <button onClick={() => set('type', val)}
+      style={{ padding:'5px 13px', borderRadius:6, border:'1px solid', fontSize:12, cursor:'pointer',
+        borderColor: draft.type===val ? '#6366f1' : '#374151',
+        background:  draft.type===val ? '#6366f122' : 'none',
+        color:       draft.type===val ? '#a5b4fc'   : '#6b7280' }}>
+      {label}
+    </button>
+  );
+
+  return (
+    <Modal title="Timeline Background" onClose={onClose} width={420}>
+      <div>
+        {/* Type selector */}
+        <div style={{ display:'flex', gap:8, marginBottom:20 }}>
+          {typeBtn('solid','Solid colour')}
+          {typeBtn('gradient','Gradient')}
+          {typeBtn('photo','Photo')}
+        </div>
+
+        {/* Solid */}
+        {draft.type === 'solid' && (
+          <div style={rowStyle}>
+            <span style={labelStyle}>Colour</span>
+            <input type="color" value={draft.color} onChange={e => set('color', e.target.value)}
+              style={{ width:44, height:32, border:'none', borderRadius:6, cursor:'pointer', padding:2, background:'none' }} />
+            <span style={{ fontSize:12, color:'#6b7280' }}>{draft.color}</span>
+          </div>
+        )}
+
+        {/* Gradient */}
+        {draft.type === 'gradient' && (<>
+          <div style={rowStyle}>
+            <span style={labelStyle}>Colour 1</span>
+            <input type="color" value={draft.color} onChange={e => set('color', e.target.value)}
+              style={{ width:44, height:32, border:'none', borderRadius:6, cursor:'pointer', padding:2, background:'none' }} />
+            <span style={{ fontSize:12, color:'#6b7280' }}>{draft.color}</span>
+          </div>
+          <div style={rowStyle}>
+            <span style={labelStyle}>Colour 2</span>
+            <input type="color" value={draft.color2} onChange={e => set('color2', e.target.value)}
+              style={{ width:44, height:32, border:'none', borderRadius:6, cursor:'pointer', padding:2, background:'none' }} />
+            <span style={{ fontSize:12, color:'#6b7280' }}>{draft.color2}</span>
+          </div>
+          <div style={rowStyle}>
+            <span style={labelStyle}>Direction</span>
+            <select value={draft.dir} onChange={e => set('dir', e.target.value)}
+              style={{ flex:1, padding:'5px 10px', background:'#1f2937', border:'1px solid #374151', borderRadius:6, color:'#e5e7eb', fontSize:12 }}>
+              {BG_DIRS.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+        </>)}
+
+        {/* Photo */}
+        {draft.type === 'photo' && (
+          <div style={{ marginBottom:14 }}>
+            {draft.photo
+              ? <div style={{ position:'relative', borderRadius:8, overflow:'hidden', marginBottom:10 }}>
+                  <img src={draft.photo} style={{ width:'100%', height:140, objectFit:'cover', display:'block' }} />
+                  <button onClick={() => set('photo', null)}
+                    style={{ position:'absolute', top:6, right:6, background:'rgba(0,0,0,.65)', border:'none', color:'white', borderRadius:4, padding:'2px 8px', cursor:'pointer', fontSize:11 }}>Remove</button>
+                </div>
+              : <div className="drop-zone" onClick={() => fileRef.current.click()} style={{ marginBottom:10 }}>
+                  <div style={{ fontSize:22, marginBottom:4 }}>🖼</div>
+                  <div style={{ fontSize:13 }}>Click to choose a background photo</div>
+                  <div style={{ fontSize:11, marginTop:3 }}>JPG · PNG · WebP (auto-resized to 1920×1080)</div>
+                </div>
+            }
+            <input ref={fileRef} type="file" accept="image/*" onChange={handlePhoto} style={{ display:'none' }} />
+          </div>
+        )}
+
+        {/* Live preview swatch */}
+        <div style={{ borderRadius:8, height:52, marginBottom:18, background:bgToCss(draft), border:'1px solid #374151' }} />
+
+        <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+          <Btn onClick={onClose}>Cancel</Btn>
+          <Btn primary onClick={() => { onSave(draft); onClose(); }}>Apply</Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+// ─── New / Open Timeline modals ───────────────────────────────────────────────
+const NewTimelineModal = ({ onConfirm, onClose }) => {
+  const [name, setName] = useState(''), [withSample, setWithSample] = useState(true);
+  const confirm = () => { if (name.trim()) onConfirm(name.trim(), withSample); };
+  return (
+    <Modal title="New Timeline" onClose={onClose} width={400}>
+      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+        <div>
+          <label style={{ fontSize:12, color:'#9ca3af', display:'block', marginBottom:5 }}>Timeline name</label>
+          <input autoFocus type="text" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key==='Enter' && confirm()} placeholder="e.g. My Family History"
+            style={{ width:'100%', background:'#1f2937', border:'1px solid #374151', borderRadius:8, padding:'8px 12px', fontSize:13, color:'#f9fafb', outline:'none', boxSizing:'border-box' }} />
+        </div>
+        <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:13, color:'#d1d5db' }}>
+          <input type="checkbox" checked={withSample} onChange={e => setWithSample(e.target.checked)} style={{ accentColor:'#6366f1' }} />
+          Load sample data
+        </label>
+        <div style={{ display:'flex', gap:8 }}>
+          <Btn onClick={onClose}>Cancel</Btn>
+          <Btn primary onClick={confirm} style={{ flex:1 }}>Create</Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+const OpenTimelineModal = ({ onLoad, onClose }) => {
+  const [saves, setSaves] = useState(loadSaves);
+  const fileRef = useRef(null);
+  const handleDelete = (name, e) => { e.stopPropagation(); deleteFromStorage(name); setSaves(loadSaves()); };
+  const handleFile = e => {
+    const file = e.target.files[0]; if (!file) return;
+    const r = new FileReader();
+    r.onload = ev => { try { const d = JSON.parse(ev.target.result); if (!Array.isArray(d.people)||!Array.isArray(d.events)) throw 0; onLoad(d.name||file.name.replace('.json',''), d.people, d.events, d.eras||[], d.bgSettings||null); } catch { alert('Invalid JSON timeline file.'); } };
+    r.readAsText(file); e.target.value = '';
+  };
+  return (
+    <Modal title="Open Timeline" onClose={onClose} width={460}>
+      <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+        {saves.length===0 ? <p style={{ fontSize:13, color:'#6b7280', padding:'8px 0' }}>No saved timelines yet.</p>
+          : saves.map(s => (
+            <div key={s.name} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:8, background:'#1f2937', border:'1px solid #374151' }}>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:13, fontWeight:600, color:'#f9fafb', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.name}</div>
+                <div style={{ fontSize:11, color:'#6b7280', marginTop:2 }}>{s.people.length} people · {s.events.length} events · {new Date(s.savedAt).toLocaleDateString()}</div>
+              </div>
+              <button onClick={e => handleDelete(s.name, e)} style={{ fontSize:11, color:'#6b7280', background:'none', border:'none', cursor:'pointer', padding:'2px 6px' }}>✕</button>
+              <Btn primary small onClick={() => onLoad(s.name, s.people, s.events, s.eras||[], s.bgSettings||null)}>Open</Btn>
+            </div>
+          ))}
+        <div style={{ paddingTop:8, borderTop:'1px solid #1f2937' }}>
+          <button onClick={() => fileRef.current.click()} style={{ width:'100%', padding:'9px 0', borderRadius:8, border:'1px dashed #374151', background:'none', color:'#9ca3af', fontSize:13, cursor:'pointer' }}>Import from JSON file…</button>
+          <input ref={fileRef} type="file" accept=".json" onChange={handleFile} style={{ display:'none' }} />
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+// ─── CSV Import Modal ─────────────────────────────────────────────────────────
+const ImportCSVModal = ({ people, events, onImportPeople, onImportEvents, onClose }) => {
+  const [tab, setTab]             = useState('events'); // 'people' | 'events'
+  const [dragOver, setDragOver]   = useState(false);
+  const [preview, setPreview]     = useState(null);   // { rows, error }
+  const [mode, setMode]           = useState('merge'); // 'merge' | 'replace'
+  const fileRef = useRef(null);
+
+  const processText = (text) => {
+    const { headers, rows } = parseCSV(text);
+    if (rows.length === 0) { setPreview({ rows: [], error: 'No data rows found.' }); return; }
+    setPreview({ rows, headers, error: null });
+  };
+
+  const handleFile = e => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = ev => processText(ev.target.result); r.readAsText(f); e.target.value = ''; };
+  const handleDrop = e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) { const r = new FileReader(); r.onload = ev => processText(ev.target.result); r.readAsText(f); } };
+
+  const doImport = () => {
+    if (!preview?.rows?.length) return;
+    if (tab === 'people') {
+      const imported = preview.rows.map(r => csvRowToPerson(r, people));
+      onImportPeople(imported, mode); onClose();
+    } else {
+      const imported = preview.rows.map(r => csvRowToEvent(r, events));
+      onImportEvents(imported, mode); onClose();
+    }
+  };
+
+  const downloadTemplate = () => downloadText(tab === 'people' ? PEOPLE_TEMPLATE : EVENTS_TEMPLATE, `${tab}-template.csv`);
+
+  const tabStyle = active => ({ padding:'6px 16px', borderRadius:'6px 6px 0 0', border:'none', background:active?'#1f2937':'none', color:active?'#f9fafb':'#6b7280', cursor:'pointer', fontSize:13, fontWeight:active?600:400 });
+
+  return (
+    <Modal title="Import CSV" onClose={onClose} width={640}>
+      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+        {/* Tabs */}
+        <div style={{ display:'flex', gap:4, borderBottom:'1px solid #1f2937', paddingBottom:0 }}>
+          <button style={tabStyle(tab==='people')} onClick={() => { setTab('people'); setPreview(null); }}>People</button>
+          <button style={tabStyle(tab==='events')} onClick={() => { setTab('events'); setPreview(null); }}>Events</button>
+        </div>
+
+        {/* Instructions + template */}
+        <div style={{ background:'#1f2937', borderRadius:8, padding:'10px 14px', fontSize:12, color:'#9ca3af', lineHeight:1.7 }}>
+          {tab === 'people'
+            ? <><strong style={{ color:'#e5e7eb' }}>People columns:</strong> id (optional), name, birth, death, role, color (hex)<br/>Dates: <code style={{ color:'#c084fc' }}>4 BC</code> · <code style={{ color:'#c084fc' }}>33 AD</code> · <code style={{ color:'#c084fc' }}>1867</code> · <code style={{ color:'#c084fc' }}>25/12/1867</code> · <code style={{ color:'#c084fc' }}>1867-11-07</code></>
+            : <><strong style={{ color:'#e5e7eb' }}>Events columns:</strong> id (optional), title, date_start, date_end (optional), description, category, person_ids<br/>person_ids: pipe-separated person IDs — <code style={{ color:'#c084fc' }}>p1|p3</code>. Categories: {ALL_CATEGORIES.join(', ')}</>
+          }
+          <br/><button onClick={downloadTemplate} style={{ marginTop:4, fontSize:11, color:'#818cf8', background:'none', border:'none', cursor:'pointer', padding:0 }}>⬇ Download {tab} template CSV</button>
+        </div>
+
+        {/* Drop zone */}
+        {!preview && (
+          <div className={`drop-zone${dragOver?' drag-over':''}`}
+            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+            onClick={() => fileRef.current.click()}>
+            <div style={{ fontSize:28, marginBottom:8 }}>📂</div>
+            <div style={{ fontSize:13, fontWeight:500 }}>Drop a CSV file here, or click to browse</div>
+            <div style={{ fontSize:11, marginTop:4 }}>Supports .csv and .txt files</div>
+            <input ref={fileRef} type="file" accept=".csv,.txt" onChange={handleFile} style={{ display:'none' }} />
+          </div>
+        )}
+
+        {/* Preview */}
+        {preview && (
+          <div>
+            {preview.error
+              ? <div style={{ color:'#f87171', fontSize:13, padding:'8px 0' }}>⚠ {preview.error}</div>
+              : <div style={{ fontSize:12, color:'#6b7280', marginBottom:8 }}>{preview.rows.length} row{preview.rows.length!==1?'s':''} found — preview (first 5):</div>
+            }
+            {preview.rows.length > 0 && (
+              <div style={{ overflowX:'auto', borderRadius:8, border:'1px solid #374151', maxHeight:200 }}>
+                <table className="dg-table">
+                  <thead>
+                    <tr>{preview.headers.map(h => <th key={h}>{h}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {preview.rows.slice(0,5).map((row,i) => (
+                      <tr key={i}>{preview.headers.map(h => <td key={h}><span className="dg-cell">{row[h]||''}</span></td>)}</tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <button onClick={() => setPreview(null)} style={{ fontSize:11, color:'#6b7280', background:'none', border:'none', cursor:'pointer', marginTop:6, padding:0 }}>← Choose different file</button>
+          </div>
+        )}
+
+        {/* Import mode */}
+        <div style={{ display:'flex', gap:16 }}>
+          {['merge','replace'].map(m => (
+            <label key={m} style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:13, color: mode===m ? '#f9fafb' : '#6b7280' }}>
+              <input type="radio" name="mode" value={m} checked={mode===m} onChange={() => setMode(m)} style={{ accentColor:'#6366f1' }} />
+              {m === 'merge' ? 'Merge with existing (add new, update matching IDs)' : 'Replace all (clear existing first)'}
+            </label>
+          ))}
+        </div>
+
+        {/* Actions */}
+        <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+          <Btn onClick={onClose}>Cancel</Btn>
+          <Btn primary onClick={doImport} style={{ opacity: preview?.rows?.length ? 1 : .4 }}>
+            Import {preview?.rows?.length ? `${preview.rows.length} rows` : ''}
+          </Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+// ─── Date Entry Widget ────────────────────────────────────────────────────────
+// Floating panel shown when editing a date cell.
+// Supports two independent entry modes:
+//   'year'  → year number + BC / AD toggle  → stored as integer (-4, 33, 1867)
+//   'full'  → native date picker (AD only)  → stored as "yyyy-mm-dd"
+// Both types can coexist on the same timeline.
+const DateEntryWidget = ({ value, onCommit, onCancel, anchorRef }) => {
+  const ref = useRef(null);
+
+  // Detect initial mode from stored value type
+  const isIso = typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(String(value));
+  const [mode, setMode] = useState(isIso ? 'full' : 'year');
+
+  // Compute fixed position from anchor element so the widget escapes overflow:auto parents
+  const [pos, setPos] = useState({ top:0, left:0 });
+  useEffect(() => {
+    if (anchorRef?.current) {
+      const r = anchorRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 2, left: r.left });
+    }
+  }, [anchorRef]);
+
+  // Year-mode state
+  const initYear = () => {
+    if (value == null) return 2000;
+    if (typeof value === 'number') return Math.abs(value) || 2000;
+    return Math.abs(parseInt(String(value))) || 2000;
+  };
+  const [year, setYear] = useState(initYear);
+  const [bc, setBc] = useState(typeof value === 'number' && value <= 0);
+
+  // Full-date mode state — keep as "yyyy-mm-dd" for the native picker
+  const toInputDate = v => {
+    if (!v) return '';
+    if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
+    if (typeof v === 'number' && v > 0) return `${String(v).padStart(4, '0')}-06-01`;
+    return '';
+  };
+  const [dateStr, setDateStr] = useState(toInputDate(value));
+
+  // Also support free-text dd/mm/yyyy entry in full-date mode
+  const [rawText, setRawText] = useState('');
+  const [useText, setUseText] = useState(false);
+
+  // Close on outside click
+  useEffect(() => {
+    const close = e => { if (ref.current && !ref.current.contains(e.target)) onCancel(); };
+    const id = setTimeout(() => document.addEventListener('mousedown', close), 0);
+    return () => { clearTimeout(id); document.removeEventListener('mousedown', close); };
+  }, [onCancel]);
+
+  const doCommit = () => {
+    if (mode === 'year') {
+      const yr = Math.abs(parseInt(year) || 1);
+      onCommit(bc ? -yr : yr);
+    } else if (useText) {
+      const parsed = parseDate(rawText);
+      if (parsed != null) onCommit(parsed); else onCancel();
+    } else {
+      if (dateStr) onCommit(dateStr); else onCancel();
+    }
+  };
+
+  const handleKey = e => {
+    if (e.key === 'Enter') { e.preventDefault(); doCommit(); }
+    if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+  };
+
+  // Preview string — shows what will actually be stored
+  const preview = mode === 'year'
+    ? (bc ? `${Math.abs(parseInt(year)||0)} BC` : `${parseInt(year)||0} AD`)
+    : useText ? (rawText || '—') : (dateStr ? dateStr : '—');
+
+  const tabBtn = (m, label) => (
+    <button onClick={() => setMode(m)} style={{
+      flex:1, padding:'6px 0', border:'none', borderBottom:`2px solid ${mode===m ? '#6366f1' : 'transparent'}`,
+      background:'none', color: mode===m ? '#a5b4fc' : '#6b7280', fontSize:12, fontWeight: mode===m ? 600 : 400, cursor:'pointer',
+    }}>{label}</button>
+  );
+
+  const togBtn = (active, label, onClick) => (
+    <button onClick={onClick} style={{
+      padding:'5px 12px', borderRadius:6, border:'1px solid', fontSize:12, cursor:'pointer',
+      borderColor: active ? '#6366f1' : '#374151',
+      background:  active ? '#6366f122' : '#0d1117',
+      color:       active ? '#a5b4fc'   : '#6b7280',
+    }}>{label}</button>
+  );
+
+  return (
+    <div ref={ref} onKeyDown={handleKey}
+      style={{ position:'fixed', top:pos.top, left:pos.left, background:'#1f2937', border:'1px solid #374151', borderRadius:10, padding:'14px 16px', minWidth:260, boxShadow:'0 8px 28px rgba(0,0,0,.6)', zIndex:9999 }}>
+
+      {/* Mode tabs */}
+      <div style={{ display:'flex', borderBottom:'1px solid #374151', marginBottom:14 }}>
+        {tabBtn('year', 'Year  (BC / AD)')}
+        {tabBtn('full', 'Full date')}
+      </div>
+
+      {/* ── Year mode ── */}
+      {mode === 'year' && (
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <input autoFocus type="number" min={1} value={year}
+              onChange={e => setYear(e.target.value)}
+              style={{ width:90, padding:'7px 10px', background:'#0d1117', border:'1px solid #374151', borderRadius:6, color:'#f9fafb', fontSize:13, outline:'none' }} />
+            {togBtn(!bc, 'AD', () => setBc(false))}
+            {togBtn( bc, 'BC', () => setBc(true))}
+          </div>
+          <div style={{ fontSize:11, color:'#4b5563' }}>
+            Enter the year number. Use BC for dates before year 1.
+          </div>
+        </div>
+      )}
+
+      {/* ── Full date mode ── */}
+      {mode === 'full' && (
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          {!useText ? (
+            <>
+              <input autoFocus type="date" value={dateStr} onChange={e => setDateStr(e.target.value)}
+                style={{ width:'100%', padding:'7px 10px', background:'#0d1117', border:'1px solid #374151', borderRadius:6, color:'#f9fafb', fontSize:13, outline:'none', colorScheme:'dark', boxSizing:'border-box' }} />
+              <button onClick={() => setUseText(true)}
+                style={{ fontSize:11, color:'#4b5563', background:'none', border:'none', cursor:'pointer', textAlign:'left', padding:0 }}>
+                Type instead (dd/mm/yyyy) →
+              </button>
+            </>
+          ) : (
+            <>
+              <input autoFocus type="text" value={rawText} onChange={e => setRawText(e.target.value)}
+                placeholder="25/12/1867 or 1867-11-07"
+                style={{ width:'100%', padding:'7px 10px', background:'#0d1117', border:'1px solid #374151', borderRadius:6, color:'#f9fafb', fontSize:13, outline:'none', boxSizing:'border-box' }} />
+              <button onClick={() => setUseText(false)}
+                style={{ fontSize:11, color:'#4b5563', background:'none', border:'none', cursor:'pointer', textAlign:'left', padding:0 }}>
+                ← Use date picker
+              </button>
+            </>
+          )}
+          <div style={{ fontSize:11, color:'#4b5563' }}>
+            Full dates are AD only. Use the <em>Year</em> tab for BC dates.
+          </div>
+        </div>
+      )}
+
+      {/* Preview + actions */}
+      <div style={{ marginTop:14, paddingTop:12, borderTop:'1px solid #1f2937', display:'flex', alignItems:'center', gap:8 }}>
+        <div style={{ flex:1, fontSize:11, color:'#6b7280' }}>
+          Stores as: <span style={{ color:'#c084fc', fontWeight:600 }}>{preview}</span>
+        </div>
+        <Btn small onClick={onCancel}>Cancel</Btn>
+        <Btn small primary onClick={doCommit}>OK</Btn>
+      </div>
+    </div>
+  );
+};
+
+// ─── Data Grid ────────────────────────────────────────────────────────────────
+const DataGrid = ({ columns, rows, onUpdate, onAdd, onDelete, extraCellProps = {} }) => {
+  const fmt = useFmt();
+  const [editing, setEditing] = useState(null); // { row, col }
+  const [val, setVal]         = useState('');
+  const inputRef              = useRef(null);
+  const dateAnchorRef         = useRef(null); // ref passed to DateEntryWidget for fixed positioning
+
+  useEffect(() => { if (editing) setTimeout(() => inputRef.current?.focus(), 0); }, [editing]);
+
+  const startEdit = (ri, col) => {
+    const raw = rows[ri][col.key];
+    setEditing({ row: ri, col: col.key });
+    setVal(col.type === 'date' ? displayDate(raw) : col.type === 'person' ? (raw||[]).join('|') : String(raw ?? ''));
+  };
+
+  const commit = useCallback((ri, colKey) => {
+    const col = columns.find(c => c.key === colKey);
+    if (!col) return;
+    let v = val.trim();
+    if (col.type === 'date')   v = parseDate(v);
+    if (col.type === 'person') v = v ? v.split(/[|,]/).map(s => s.trim()).filter(Boolean) : [];
+    onUpdate(ri, colKey, v);
+    setEditing(null);
+  }, [val, columns, onUpdate]);
+
+  const handleKey = (e, ri, colKey) => {
+    if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); commit(ri, colKey); }
+    else if (e.key === 'Escape') setEditing(null);
+  };
+
+  const renderCell = (row, ri, col) => {
+    const isEditing = editing?.row === ri && editing?.col === col.key;
+    const raw = row[col.key];
+
+    if (isEditing) {
+      // Date columns get the DateEntryWidget — fixed-position panel so it escapes overflow:auto
+      if (col.type === 'date') return (
+        <span ref={dateAnchorRef} style={{ display:'block', minHeight:33, cursor:'pointer' }}>
+          <DateEntryWidget
+            value={raw}
+            anchorRef={dateAnchorRef}
+            onCommit={v => { onUpdate(ri, col.key, v); setEditing(null); }}
+            onCancel={() => setEditing(null)}
+          />
+        </span>
+      );
+      if (col.type === 'select') return (
+        <select autoFocus className="dg-select" value={val} onChange={e => { setVal(e.target.value); onUpdate(ri, col.key, e.target.value); setEditing(null); }}
+          onBlur={() => setEditing(null)} ref={inputRef}>
+          {col.options.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      );
+      if (col.type === 'color') return (
+        <input ref={inputRef} type="color" value={val||'#818cf8'} style={{ width:'100%', height:33, border:'none', background:'none', cursor:'pointer', padding:'4px 6px', boxSizing:'border-box' }}
+          onChange={e => setVal(e.target.value)} onBlur={() => { onUpdate(ri, col.key, val); setEditing(null); }} />
+      );
+      if (col.type === 'person') return (
+        <select autoFocus className="dg-select" value={val.split('|')[0]||''} onChange={e => { const v = e.target.value; setVal(v); onUpdate(ri, col.key, v ? [v] : []); setEditing(null); }}
+          onBlur={() => setEditing(null)} ref={inputRef}>
+          <option value="">— none —</option>
+          {(extraCellProps.people||[]).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      );
+      return (
+        <input ref={inputRef} className="dg-input" value={val} onChange={e => setVal(e.target.value)}
+          onBlur={() => commit(ri, col.key)} onKeyDown={e => handleKey(e, ri, col.key)}
+          placeholder={col.hint || ''} />
+      );
+    }
+
+    // Display mode
+    let display = '';
+    if (col.type === 'date')   display = fmt(raw);
+    else if (col.type === 'color')  display = <span style={{ display:'flex', alignItems:'center', gap:7 }}><span style={{ width:14, height:14, borderRadius:3, background:raw||'#818cf8', flexShrink:0, display:'inline-block' }}/>{raw}</span>;
+    else if (col.type === 'select') display = <Badge category={raw} />;
+    else if (col.type === 'person') display = (extraCellProps.people||[]).filter(p => (raw||[]).includes(p.id)).map(p => p.name).join(', ') || <span style={{ color:'#4b5563' }}>—</span>;
+    else display = String(raw ?? '');
+
+    return <span className="dg-cell" onClick={() => startEdit(ri, col)}>{display || <span style={{ color:'#374151' }}>—</span>}</span>;
+  };
+
+  return (
+    <div style={{ overflowX:'auto', overflowY:'auto', flex:1 }}>
+      <table className="dg-table">
+        <thead>
+          <tr>
+            {columns.map(col => <th key={col.key} style={{ width:col.width }}>{col.label}</th>)}
+            <th style={{ width:36 }}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, ri) => (
+            <tr key={row.id ?? ri} className="dg-row">
+              {columns.map(col => (
+                <td key={col.key} style={{ maxWidth:col.width, width:col.width }}>
+                  {renderCell(row, ri, col)}
+                </td>
+              ))}
+              <td style={{ textAlign:'center' }}>
+                <button className="dg-del" onClick={() => onDelete(ri)} title="Delete row">✕</button>
+              </td>
+            </tr>
+          ))}
+          <tr>
+            <td colSpan={columns.length + 1} style={{ padding:'6px 10px' }}>
+              <button onClick={onAdd} style={{ fontSize:12, color:'#6366f1', background:'none', border:'1px dashed #374151', borderRadius:6, padding:'4px 14px', cursor:'pointer', width:'100%' }}>+ Add row</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+// ─── Data View ────────────────────────────────────────────────────────────────
+const PEOPLE_COLS = [
+  { key:'name',  label:'Name',   type:'text',   width:160 },
+  { key:'birth', label:'Birth',  type:'date',   width:110, hint:'4 BC · 33 AD · 1867 · 25/12/1867' },
+  { key:'death', label:'Death',  type:'date',   width:110, hint:'4 BC · 33 AD · 1867 · 25/12/1867' },
+  { key:'role',  label:'Role',   type:'text',   width:130 },
+  { key:'color', label:'Colour', type:'color',  width:110 },
+];
+const EVENT_COLS = [
+  { key:'title',       label:'Title',       type:'text',   width:190 },
+  { key:'date_start',  label:'Start',       type:'date',   width:110, hint:'4 BC · 33 AD · 1867 · 25/12/1867' },
+  { key:'date_end',    label:'End',         type:'date',   width:110, hint:'4 BC · 33 AD · 1867 · 25/12/1867' },
+  { key:'category',    label:'Category',    type:'select', width:110, options:ALL_CATEGORIES },
+  { key:'person_ids',  label:'Person',      type:'person', width:140 },
+  { key:'description', label:'Description', type:'text',   width:250 },
+];
+
+const DataView = ({ people, events, setPeople, setEvents, orientation, setOrientation }) => {
+  const [tab, setTab]         = useState('events');
+  const [showImport, setShowImport] = useState(false);
+
+  const updatePerson = (ri, key, val) => setPeople(prev => prev.map((p, i) => i === ri ? { ...p, [key]: val, initials: key==='name' ? (val||'').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase() || p.initials : p.initials } : p));
+  const deletePerson = (ri) => setPeople(prev => prev.filter((_, i) => i !== ri));
+  const addPerson    = () => setPeople(prev => [...prev, { id:'p'+uid(), name:'New Person', birth:1900, death:2000, role:'', color:'#818cf8', initials:'NP', photo:null }]);
+
+  const updateEvent  = (ri, key, val) => setEvents(prev => prev.map((e, i) => i === ri ? { ...e, [key]: val } : e));
+  const deleteEvent  = (ri) => setEvents(prev => prev.filter((_, i) => i !== ri));
+  const addEvent     = () => setEvents(prev => [...prev, { id:uid(), title:'New Event', date_start:1900, date_end:undefined, description:'', category:'Historical', person_ids:[], images:[] }]);
+
+  const exportPeopleCSV = () => downloadText(buildCSV(PEOPLE_HEADERS, peopleToCsvRows(people)), 'people.csv');
+  const exportEventsCSV = () => downloadText(buildCSV(EVENTS_HEADERS, eventsToCsvRows(events)), 'events.csv');
+
+  const handleImportPeople = (imported, mode) => {
+    if (mode === 'replace') { setPeople(imported); return; }
+    setPeople(prev => {
+      const map = Object.fromEntries(prev.map(p => [p.id, p]));
+      imported.forEach(p => { map[p.id] = p; });
+      return Object.values(map);
+    });
+  };
+  const handleImportEvents = (imported, mode) => {
+    if (mode === 'replace') { setEvents(imported); return; }
+    setEvents(prev => {
+      const map = Object.fromEntries(prev.map(e => [String(e.id), e]));
+      imported.forEach(e => { map[String(e.id)] = e; });
+      return Object.values(map);
+    });
+  };
+
+  const tabStyle = active => ({ padding:'6px 16px', borderRadius:'6px 6px 0 0', border:'none', background:active?'#1f2937':'none', color:active?'#f9fafb':'#6b7280', cursor:'pointer', fontSize:13, fontWeight:active?600:400 });
+
+  return (
+    <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minWidth:0 }}>
+      {/* Toolbar */}
+      <div style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 14px', borderBottom:'1px solid #1f2937', background:'#0d1117', flexShrink:0 }}>
+        {/* View toggles */}
+        <Btn small onClick={() => setOrientation('horizontal')} style={{ fontWeight:600, border:'1px solid #374151', background:'#1f2937', color:'#9ca3af' }}>⇔ Horizontal</Btn>
+        <Btn small onClick={() => setOrientation('vertical')} style={{ fontWeight:600, border:'1px solid #374151', background:'#1f2937', color:'#9ca3af' }}>⇕ Vertical</Btn>
+        <div style={{ width:1, height:16, background:'#1f2937', margin:'0 4px' }} />
+        {/* Tabs */}
+        <button style={tabStyle(tab==='people')} onClick={() => setTab('people')}>People ({people.length})</button>
+        <button style={tabStyle(tab==='events')} onClick={() => setTab('events')}>Events ({events.length})</button>
+        <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
+          <Btn small onClick={() => setShowImport(true)}>⬆ Import CSV</Btn>
+          <Btn small onClick={tab==='people' ? exportPeopleCSV : exportEventsCSV}>⬇ Export CSV</Btn>
+          <Btn small onClick={() => downloadText(tab==='people' ? PEOPLE_TEMPLATE : EVENTS_TEMPLATE, `${tab}-template.csv`)}>Template</Btn>
+        </div>
+      </div>
+
+      {/* Grid */}
+      <div style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column' }}>
+        {tab === 'people'
+          ? <DataGrid columns={PEOPLE_COLS} rows={people} onUpdate={updatePerson} onAdd={addPerson} onDelete={deletePerson} />
+          : <DataGrid columns={EVENT_COLS}  rows={events} onUpdate={updateEvent}  onAdd={addEvent}  onDelete={deleteEvent}  extraCellProps={{ people }} />
+        }
+      </div>
+
+      {showImport && (
+        <ImportCSVModal people={people} events={events} onImportPeople={handleImportPeople} onImportEvents={handleImportEvents} onClose={() => setShowImport(false)} />
+      )}
+    </div>
+  );
+};
+
+// ─── Event Detail Panel ───────────────────────────────────────────────────────
+const EventPanel = ({ event, people, onClose, onUploadImage, onRemoveImage, onUpdatePersonIds, onEditEvent }) => {
+  const fmt = useFmt();
+  const [lightbox, setLightbox] = useState(null);
+  const fileRef = useRef(null);
+
+  const handleImgUpload = async e => {
+    for (const file of Array.from(e.target.files)) {
+      try { onUploadImage(event.id, await resizeImage(file, 800, 600)); } catch {}
+    }
+    e.target.value = '';
+  };
+
+  const togglePerson = id => {
+    const newIds = event.person_ids.includes(id)
+      ? event.person_ids.filter(x => x !== id)
+      : [...event.person_ids, id];
+    onUpdatePersonIds(event.id, newIds);
+  };
+
+  return (
+    <div style={{ width:280, flexShrink:0, display:'flex', flexDirection:'column', background:'#111827', borderLeft:'1px solid #1f2937' }}>
+      <div style={{ padding:'14px 16px', borderBottom:'1px solid #1f2937' }}>
+        <div style={{ display:'flex', alignItems:'flex-start', gap:8 }}>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:13, fontWeight:600, color:'#f9fafb', lineHeight:1.4 }}>{event.title}</div>
+            <div style={{ marginTop:6, display:'flex', alignItems:'center', gap:8 }}>
+              <Badge category={event.category} />
+              <span style={{ fontSize:11, color:'#6b7280' }}>{fmt(event.date_start)}{event.date_end ? ` – ${fmt(event.date_end)}` : ''}</span>
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:4 }}>
+            <button onClick={onEditEvent} title="Edit event" style={{ color:'#6b7280', fontSize:13, background:'none', border:'none', cursor:'pointer', padding:'2px 5px' }}>✏</button>
+            <button onClick={onClose} style={{ color:'#6b7280', fontSize:20, background:'none', border:'none', cursor:'pointer', padding:'0 2px' }}>×</button>
+          </div>
+        </div>
+      </div>
+      <div style={{ flex:1, overflowY:'auto', padding:16, display:'flex', flexDirection:'column', gap:18 }}>
+        <div>
+          <div style={{ fontSize:11, fontWeight:600, color:'#6b7280', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:6 }}>Description</div>
+          <p style={{ fontSize:13, color:'#d1d5db', lineHeight:1.6, margin:0 }}>{event.description}</p>
+        </div>
+        <div>
+          <div style={{ fontSize:11, fontWeight:600, color:'#6b7280', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:8 }}>People</div>
+          {people.length === 0
+            ? <div style={{ fontSize:12, color:'#374151' }}>No people added yet.</div>
+            : <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+                {people.map(p => {
+                  const linked = event.person_ids.includes(p.id);
+                  return (
+                    <button key={p.id} onClick={() => togglePerson(p.id)} title={linked ? 'Remove from event' : 'Add to event'}
+                      style={{ display:'flex', alignItems:'center', gap:5, padding:'4px 9px', borderRadius:20, border:`1px solid ${linked?p.color:'#374151'}`, background:linked?p.color+'22':'none', color:linked?p.color:'#4b5563', fontSize:11, cursor:'pointer' }}>
+                      <div style={{ width:10, height:10, borderRadius:'50%', background:p.color, flexShrink:0 }} />
+                      {p.name}
+                    </button>
+                  );
+                })}
+              </div>
+          }
+        </div>
+        <div>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+            <div style={{ fontSize:11, fontWeight:600, color:'#6b7280', textTransform:'uppercase', letterSpacing:'.05em' }}>Images {event.images?.length > 0 && <span style={{ color:'#4b5563' }}>({event.images.length})</span>}</div>
+            <Btn small onClick={() => fileRef.current?.click()}>+ Add</Btn>
+            <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleImgUpload} style={{ display:'none' }} />
+          </div>
+          {event.images?.length > 0 ? (
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
+              {event.images.map((src, i) => (
+                <div key={i} style={{ position:'relative' }}>
+                  <img src={src} className="img-thumb" onClick={() => setLightbox(src)} />
+                  <button onClick={() => onRemoveImage(event.id, i)} style={{ position:'absolute', top:3, right:3, width:18, height:18, borderRadius:4, background:'rgba(0,0,0,.65)', border:'none', color:'#e5e7eb', fontSize:10, cursor:'pointer' }}>✕</button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div onClick={() => fileRef.current?.click()} style={{ border:'1px dashed #374151', borderRadius:8, padding:'20px 0', textAlign:'center', color:'#4b5563', fontSize:12, cursor:'pointer' }}>
+              Click to add images<br/><span style={{ fontSize:10 }}>JPG · PNG · GIF · WebP · SVG</span>
+            </div>
+          )}
+        </div>
+      </div>
+      {lightbox && <Lightbox src={lightbox} onClose={() => setLightbox(null)} />}
+    </div>
+  );
+};
+
+// ─── Sidebar ──────────────────────────────────────────────────────────────────
+const Sidebar = ({ people, events, selectedPeople, setSelectedPeople, selectedCategories, setSelectedCategories, onUpdatePersonPhoto, onAddPerson, onEditPerson }) => {
+  const fmt = useFmt();
+  const togglePerson = id => setSelectedPeople(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleCat    = cat => setSelectedCategories(prev => { const n = new Set(prev); n.has(cat) ? n.delete(cat) : n.add(cat); return n; });
+  const allP = selectedPeople.size === people.length, allC = selectedCategories.size === ALL_CATEGORIES.length;
+  const vis  = events.filter(e => e.person_ids.some(id => selectedPeople.has(id)) && selectedCategories.has(e.category)).length;
+  const lbl  = (txt, btn, fn, extra = null) => (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+      <span style={{ fontSize:11, fontWeight:600, color:'#6b7280', textTransform:'uppercase', letterSpacing:'.06em' }}>{txt}</span>
+      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+        {extra}
+        <button onClick={fn} style={{ fontSize:11, color:'#4b5563', background:'none', border:'none', cursor:'pointer' }}>{btn}</button>
+      </div>
+    </div>
+  );
+  return (
+    <div style={{ width:200, flexShrink:0, background:'#0d1117', borderRight:'1px solid #1f2937', display:'flex', flexDirection:'column', overflowY:'auto' }}>
+      <div style={{ padding:12 }}>
+        {lbl('People', allP?'Hide all':'Show all', () => setSelectedPeople(allP ? new Set() : new Set(people.map(p => p.id))),
+          onAddPerson && <button onClick={onAddPerson} title="Add person" style={{ fontSize:13, lineHeight:1, color:'#6366f1', background:'none', border:'none', cursor:'pointer', padding:'0 2px' }}>＋</button>
+        )}
+        {people.length === 0 && <p style={{ fontSize:12, color:'#374151', margin:0 }}>No people yet.</p>}
+        <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+          {people.map(p => {
+            const on = selectedPeople.has(p.id);
+            return (
+              <div key={p.id} style={{ position:'relative' }}
+                onMouseEnter={e => { e.currentTarget.style.background='#1f2937'; const btn=e.currentTarget.querySelector('.edit-btn'); if(btn) btn.style.opacity='1'; }}
+                onMouseLeave={e => { e.currentTarget.style.background='none'; const btn=e.currentTarget.querySelector('.edit-btn'); if(btn) btn.style.opacity='0'; }}
+                style={{ borderRadius:8 }}>
+                <button onClick={() => togglePerson(p.id)} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 8px', paddingRight:28, width:'100%', border:'none', background:'none', cursor:'pointer', opacity:on?1:.4, textAlign:'left', borderRadius:8 }}>
+                  <Avatar person={p} size={28} dim={!on} onUpload={onUpdatePersonPhoto} />
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontSize:12, fontWeight:500, color:'#e5e7eb', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</div>
+                    <div style={{ fontSize:10, color:'#4b5563' }}>{fmt(p.birth)} – {fmt(p.death)}</div>
+                  </div>
+                </button>
+                {onEditPerson && (
+                  <button className="edit-btn" onClick={e => { e.stopPropagation(); onEditPerson(p); }}
+                    title="Edit person"
+                    style={{ position:'absolute', right:5, top:'50%', transform:'translateY(-50%)', opacity:0, transition:'opacity .15s', background:'none', border:'none', color:'#6b7280', fontSize:11, cursor:'pointer', padding:'3px 5px', borderRadius:4 }}>✏</button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div style={{ padding:12, borderTop:'1px solid #1f2937' }}>
+        {lbl('Categories', allC?'Hide all':'Show all', () => setSelectedCategories(allC ? new Set() : new Set(ALL_CATEGORIES)))}
+        <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+          {ALL_CATEGORIES.map(cat => {
+            const on = selectedCategories.has(cat), count = events.filter(e => e.category===cat).length;
+            return (
+              <button key={cat} onClick={() => toggleCat(cat)} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 8px', borderRadius:6, border:'none', background:'none', cursor:'pointer', opacity:on?1:.3, textAlign:'left' }}
+                onMouseEnter={e => e.currentTarget.style.background='#1f2937'} onMouseLeave={e => e.currentTarget.style.background='none'}>
+                <CategoryDot category={cat} size={8} />
+                <span style={{ fontSize:12, color:'#d1d5db', flex:1 }}>{cat}</span>
+                <span style={{ fontSize:11, color:'#4b5563' }}>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div style={{ marginTop:'auto', padding:12, borderTop:'1px solid #1f2937' }}>
+        <div style={{ fontSize:11, color:'#374151', lineHeight:1.7 }}>
+          {selectedPeople.size}/{people.length} people · {vis} visible<br/>
+          <span style={{ fontSize:10 }}>Click avatar to add photo</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Horizontal Timeline ──────────────────────────────────────────────────────
+const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, eras, onEditEras }) => {
+  const dateFmt = React.useContext(DateFmtCtx); // raw format string for HTML-string rendering
+  const containerRef = useRef(null), timelineRef = useRef(null), itemsRef = useRef(null), groupsRef = useRef(null);
+  const overlayRef = useRef(null), erasRef = useRef(eras);
+  erasRef.current = eras;
+  const onSelectRef = useRef(onSelectEvent), eventsRef = useRef(events);
+  onSelectRef.current = onSelectEvent; eventsRef.current = events;
+  const [visYearSpan, setVisYearSpan] = useState(2045); // current visible year range width
+
+  // Draw per-section backgrounds behind the timeline content
+  const redrawEras = useCallback(() => {
+    const tl = timelineRef.current, overlay = overlayRef.current;
+    if (!tl || !overlay) return;
+    const win = tl.getWindow();
+    const winStart = win.start.getTime(), winEnd = win.end.getTime(), winDur = winEnd - winStart;
+    const center = containerRef.current?.querySelector('.vis-panel.vis-center');
+    const w = center ? center.clientWidth : 0;
+    const leftW = containerRef.current?.querySelector('.vis-panel.vis-left')?.clientWidth || 0;
+    overlay.style.left = leftW + 'px';
+    overlay.style.width = w + 'px';
+    overlay.innerHTML = '';
+    for (const era of erasRef.current) {
+      const s = makeYear(era.yearStart).getTime();
+      const e = era.yearEnd != null ? makeYear(era.yearEnd).getTime() : win.end.getTime() + winDur;
+      const x1 = (s - winStart) / winDur * w;
+      const x2 = (e - winStart) / winDur * w;
+      const cx1 = Math.max(0, x1), cx2 = Math.min(w, x2);
+      if (cx2 <= cx1) continue;
+
+      // Resolve this era's background (fall back gracefully for old eras without bg)
+      const bg = era.bg || { type:'solid', color: era.color || '#1a1f2e', color2:'#2d3748', dir:'to right', photo:null };
+
+      // For photo backgrounds we calculate an offset so the image appears to stretch
+      // continuously across the visible window rather than repeating per section
+      let bgStyle = '';
+      if (bg.type === 'photo' && bg.photo) {
+        // Position the image so its left edge aligns with x1 relative to the overlay,
+        // giving the illusion the photo covers the full timeline span for this section.
+        const offsetX = -cx1; // shift image left by the hidden portion
+        bgStyle = `background:url('${bg.photo}') ${offsetX}px 0/auto 100% no-repeat;`;
+      } else if (bg.type === 'gradient') {
+        bgStyle = `background:linear-gradient(${bg.dir||'to right'},${bg.color},${bg.color2||'#2d3748'});`;
+      } else {
+        bgStyle = `background:${bg.color||'#1a1f2e'};`;
+      }
+
+      const div = document.createElement('div');
+      div.style.cssText = `position:absolute;top:0;left:${cx1}px;width:${cx2-cx1}px;height:100%;${bgStyle}pointer-events:none;overflow:hidden;`;
+
+      // Era label — shown when section is wide enough
+      if (cx2 - cx1 > 46) {
+        const lbl = document.createElement('div');
+        lbl.textContent = era.label;
+        lbl.style.cssText = `position:absolute;bottom:6px;left:7px;font-size:10px;color:${era.color||'#9ca3af'};font-weight:700;letter-spacing:.06em;text-transform:uppercase;text-shadow:0 1px 4px rgba(0,0,0,.9);pointer-events:none;white-space:nowrap;`;
+        div.appendChild(lbl);
+      }
+      overlay.appendChild(div);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const groups = new vis.DataSet([]), items = new vis.DataSet([]);
+    groupsRef.current = groups; itemsRef.current = items;
+    const tl = new vis.Timeline(containerRef.current, items, groups, {
+      height:'100%', start:makeYear(-20), end:makeYear(2025), min:makeYear(-100), max:makeYear(2040),
+      zoomMin:1000*60*60*24*365*2, zoomMax:1000*60*60*24*365*2100,
+      margin:{ item:{ horizontal:6, vertical:4 } }, orientation:{ axis:'top' }, align:'center',
+      selectable:true, editable:false, showCurrentTime:false, stack:true, tooltip:{ followMouse:true, overflowMethod:'cap' },
+    });
+    timelineRef.current = tl;
+    tl.on('select', ({ items:sel }) => onSelectRef.current(sel.length>0 ? (eventsRef.current.find(e => e.id===sel[0])||null) : null));
+    tl.on('rangechanged', () => {
+      redrawEras();
+      const win = tl.getWindow();
+      const span = (win.end.getTime() - win.start.getTime()) / (1000*60*60*24*365.25);
+      setVisYearSpan(Math.round(span));
+    });
+    tl.on('changed', () => redrawEras());
+    return () => { tl.destroy(); timelineRef.current = null; };
+  }, [redrawEras]);
+
+  // Re-draw era bands whenever eras array changes
+  useEffect(() => { redrawEras(); }, [eras, redrawEras]);
+
+  useEffect(() => {
+    const ds = groupsRef.current; if (!ds) return;
+    ds.clear();
+    ds.add(people.map(p => ({ id:p.id, content:`<div style="display:flex;align-items:center;gap:7px;padding:5px 0;">${p.photo?`<img src="${p.photo}" style="width:26px;height:26px;border-radius:50%;object-fit:cover;border:2px solid ${p.color};flex-shrink:0;">`:`<div style="width:26px;height:26px;border-radius:50%;background:${p.color};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:white;flex-shrink:0;">${p.initials}</div>`}<div><div style="font-size:11px;color:#e5e7eb;font-weight:500;white-space:nowrap;">${p.name}</div><div style="font-size:10px;color:#6b7280;">${fmtDate(p.birth,dateFmt)}–${fmtDate(p.death,dateFmt)}</div></div></div>` })));
+    timelineRef.current?.redraw();
+  }, [people, dateFmt]);
+
+  const showImgInBar = visYearSpan < 80; // show images inside bars when zoomed in
+  useEffect(() => {
+    const ds = itemsRef.current; if (!ds) return;
+    ds.clear();
+    ds.add(events.map(e => {
+      const col = CATEGORY_COLORS[e.category]||'#6b7280';
+      const sl = fmtDate(e.date_start, dateFmt), el = e.date_end ? ` – ${fmtDate(e.date_end, dateFmt)}` : '';
+      const hasImg = e.images?.length > 0;
+      // When zoomed in and event has images, embed the first image inside the bar
+      const content = (showImgInBar && hasImg)
+        ? `<div style="display:flex;align-items:center;gap:5px;height:100%;overflow:hidden;padding:2px 0;"><img src="${e.images[0]}" style="height:100%;max-height:36px;width:auto;aspect-ratio:4/3;object-fit:cover;border-radius:3px;flex-shrink:0;border:1px solid ${col}66;" /><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.title}</span></div>`
+        : e.title + (hasImg ? ' 🖼' : '');
+      return { id:e.id, content, start:dateForVis(e.date_start), end:dateForVis(e.date_end), group:e.person_ids[0], type:e.date_end?'range':'box', style:`background-color:${col}1a;border-color:${col};color:${col};border-width:2px;`, title:`<strong style="display:block;margin-bottom:3px;">${e.title}</strong><span style="color:#9ca3af;font-size:11px;">${sl}${el} · ${e.category}</span><br/><span style="font-size:11px;color:#d1d5db;">${e.description.slice(0,100)}${e.description.length>100?'…':''}</span>` };
+    }));
+  }, [events, dateFmt, showImgInBar]);
+
+  const goTo = (yr, sp=30) => timelineRef.current?.setWindow(makeYear(yr-Math.round(sp/2)), makeYear(yr+Math.round(sp/2)), { animation:{ duration:600, easingFunction:'easeInOutQuad' } });
+  const fitAll  = () => timelineRef.current?.fit({ animation:{ duration:700, easingFunction:'easeInOutQuad' } });
+  const zoomIn  = () => timelineRef.current?.zoomIn(0.5, { animation:true });
+  const zoomOut = () => timelineRef.current?.zoomOut(0.5, { animation:true });
+
+  const NAV = [{ label:'1 AD',yr:1,sp:80 },{ label:'30 AD',yr:30,sp:20 },{ label:'1000',yr:1000,sp:200 },{ label:'1500',yr:1500,sp:200 },{ label:'1900',yr:1900,sp:40 },{ label:'1950',yr:1950,sp:30 },{ label:'2000',yr:2000,sp:30 }];
+
+  return (
+    <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minWidth:0 }}>
+      <div style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 12px', borderBottom:'1px solid #1f2937', background:'#0d1117', flexShrink:0, flexWrap:'wrap' }}>
+        <Btn small onClick={() => setOrientation('vertical')}  style={{ fontWeight:600 }}>⇕ Vertical</Btn>
+        <Btn small onClick={() => setOrientation('data')}      style={{ fontWeight:600 }}>📊 Data</Btn>
+        <div style={{ width:1, height:14, background:'#1f2937', margin:'0 2px' }} />
+        <Btn small onClick={fitAll}>Fit All</Btn>
+        <Btn small onClick={zoomIn}  style={{ fontFamily:'monospace' }}>+</Btn>
+        <Btn small onClick={zoomOut} style={{ fontFamily:'monospace' }}>−</Btn>
+        <Btn small onClick={onEditEras} style={{ color: eras.length > 0 ? '#a5b4fc' : '#6b7280' }}>🌈 Eras{eras.length > 0 ? ` (${eras.length})` : ''}</Btn>
+        <div style={{ width:1, height:14, background:'#1f2937', margin:'0 2px' }} />
+        {NAV.map(({ label,yr,sp }) => <Btn key={label} small onClick={() => goTo(yr,sp)} style={{ fontVariantNumeric:'tabular-nums' }}>{label}</Btn>)}
+        <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ fontSize:11, color:'#4b5563' }}>{events.length} events</span>
+          <div style={{ display:'flex', gap:6 }}>{ALL_CATEGORIES.map(c => <div key={c} style={{ display:'flex', alignItems:'center', gap:3 }}><CategoryDot category={c} size={5}/><span style={{ fontSize:10, color:'#4b5563' }}>{c}</span></div>)}</div>
+        </div>
+      </div>
+      {/* Timeline + era overlay wrapper */}
+      <div style={{ flex:1, position:'relative', overflow:'hidden' }}>
+        {/* Era colour-band overlay — sits behind the timeline content */}
+        <div ref={overlayRef} style={{ position:'absolute', top:0, bottom:0, pointerEvents:'none', zIndex:0 }} />
+        {/* vis-timeline sets its container to position:relative — wrap it so height:100% resolves correctly */}
+        <div style={{ position:'absolute', top:0, left:0, right:0, bottom:0, overflow:'hidden', zIndex:1 }}>
+          <div ref={containerRef} style={{ width:'100%', height:'100%' }} />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Vertical Timeline ────────────────────────────────────────────────────────
+// Helper: find which era (if any) a given year falls in
+const eraForYear = (eras, year) =>
+  eras.find(era => year >= era.yearStart && (era.yearEnd == null || year < era.yearEnd)) || null;
+
+const VerticalTimeline = ({ events, people, onSelectEvent, selectedEvent, setOrientation, eras, onEditEras }) => {
+  const fmt = useFmt();
+  const [sortDesc, setSortDesc] = useState(false);
+  const [zoom, setZoom] = useState(1.0);
+  const zoomIn  = () => setZoom(z => Math.min(3, parseFloat((z + 0.1).toFixed(1))));
+  const zoomOut = () => setZoom(z => Math.max(0.4, parseFloat((z - 0.1).toFixed(1))));
+  const sorted = useMemo(() => {
+    const a = [...events].sort((a,b) => toSortYear(a.date_start) - toSortYear(b.date_start));
+    return sortDesc ? a.reverse() : a;
+  }, [events, sortDesc]);
+
+  // Build a render list: interleave era section banners between events when the era changes
+  const renderItems = useMemo(() => {
+    const items = [];
+    let lastEraId = null;
+    for (const e of sorted) {
+      const yr = toSortYear(e.date_start);
+      const era = eraForYear(eras, yr);
+      const eraId = era ? era.id : '__none__';
+      if (eraId !== lastEraId) {
+        items.push({ type:'era-banner', era, key:'banner-' + eraId });
+        lastEraId = eraId;
+      }
+      items.push({ type:'event', event:e, era });
+    }
+    return items;
+  }, [sorted, eras]);
+
+  return (
+    <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minWidth:0 }}>
+      <div style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 12px', borderBottom:'1px solid #1f2937', background:'#0d1117', flexShrink:0 }}>
+        <Btn small onClick={() => setOrientation('horizontal')} style={{ fontWeight:600 }}>⇔ Horizontal</Btn>
+        <Btn small onClick={() => setOrientation('data')}       style={{ fontWeight:600 }}>📊 Data</Btn>
+        <div style={{ width:1, height:14, background:'#1f2937', margin:'0 2px' }} />
+        <Btn small onClick={() => setSortDesc(v => !v)}>{sortDesc ? '↓ Newest first' : '↑ Oldest first'}</Btn>
+        <Btn small onClick={onEditEras} style={{ color: eras.length > 0 ? '#a5b4fc' : '#6b7280' }}>🌈 Sections{eras.length > 0 ? ` (${eras.length})` : ''}</Btn>
+        <div style={{ width:1, height:14, background:'#1f2937', margin:'0 2px' }} />
+        <Btn small onClick={zoomOut} style={{ fontFamily:'monospace' }}>−</Btn>
+        <span style={{ fontSize:11, color:'#4b5563', minWidth:34, textAlign:'center' }}>{Math.round(zoom*100)}%</span>
+        <Btn small onClick={zoomIn}  style={{ fontFamily:'monospace' }}>+</Btn>
+        {zoom !== 1 && <Btn small onClick={() => setZoom(1)} style={{ color:'#4b5563' }}>Reset</Btn>}
+        <div style={{ marginLeft:'auto' }}><span style={{ fontSize:11, color:'#4b5563' }}>{events.length} events</span></div>
+      </div>
+
+      <div style={{ flex:1, overflowY:'auto' }}>
+        <div style={{ zoom }}>
+        {sorted.length===0 && <div style={{ padding:60, textAlign:'center', color:'#374151', fontSize:13 }}>No events to show</div>}
+
+        {renderItems.map(item => {
+          // ── Era section banner ──
+          if (item.type === 'era-banner') {
+            const era = item.era;
+            if (!era) return null; // no banner for unassigned time
+            const bg = era.bg || DEFAULT_ERA_BG;
+            return (
+              <div key={item.key} style={{ background:bgToCss(bg), padding:'10px 32px', display:'flex', alignItems:'center', gap:10, borderBottom:'1px solid rgba(255,255,255,.07)' }}>
+                <div style={{ width:4, height:24, borderRadius:2, background:era.color, flexShrink:0 }} />
+                <span style={{ fontSize:11, fontWeight:700, color:era.color, textTransform:'uppercase', letterSpacing:'.1em', textShadow:'0 1px 4px rgba(0,0,0,.8)' }}>{era.label}</span>
+                <span style={{ fontSize:10, color:'rgba(255,255,255,.3)', marginLeft:4 }}>
+                  {era.yearStart <= 0 ? Math.abs(era.yearStart)+' BC' : era.yearStart+' AD'} – {era.yearEnd == null ? 'present' : era.yearEnd <= 0 ? Math.abs(era.yearEnd)+' BC' : era.yearEnd+' AD'}
+                </span>
+              </div>
+            );
+          }
+
+          // ── Event card ──
+          const e = item.event, era = item.era;
+          const bg = era?.bg || null;
+          const person = people.find(p => e.person_ids.includes(p.id));
+          const col = CATEGORY_COLORS[e.category]||'#6b7280', sel = selectedEvent?.id===e.id;
+          // Era-tinted card background (solid only, subtle)
+          const cardBg = sel ? '#1f2937' : (bg?.type==='solid' ? bg.color+'44' : '#111827');
+          return (
+            <div key={e.id} style={{ padding:'0 32px', background: era ? bgToCss(bg)+'22' : 'transparent' }}>
+              <div onClick={() => onSelectEvent(e)} style={{ display:'flex', alignItems:'flex-start', paddingTop:16, paddingBottom:6, position:'relative', cursor:'pointer', maxWidth:700, margin:'0 auto' }}>
+                {/* Vertical spine */}
+                <div style={{ position:'absolute', left:88, top:0, bottom:0, width:2, background: era ? era.color+'33' : '#1f2937', borderRadius:1 }} />
+                {/* Date label */}
+                <div style={{ width:80, textAlign:'right', paddingRight:16, paddingTop:5, flexShrink:0 }}>
+                  <div style={{ fontSize:11, fontWeight:600, color: era ? era.color : '#6b7280', fontVariantNumeric:'tabular-nums', textShadow: era ? '0 1px 3px rgba(0,0,0,.7)' : 'none' }}>{fmt(e.date_start)}</div>
+                  {e.date_end && <div style={{ fontSize:10, color:'#4b5563' }}>→ {fmt(e.date_end)}</div>}
+                </div>
+                {/* Dot */}
+                <div style={{ width:12, height:12, borderRadius:'50%', background:col, flexShrink:0, marginTop:5, position:'relative', zIndex:1, boxShadow:sel?`0 0 0 3px ${col}44`:'' }} />
+                {/* Card */}
+                <div style={{ flex:1, marginLeft:16, padding:'10px 14px', borderRadius:10, background:cardBg, border:`1px solid ${sel?col+'55':'rgba(255,255,255,.06)'}`, transition:'all .15s' }}
+                  onMouseEnter={ev => { ev.currentTarget.style.background='#1a2234'; ev.currentTarget.style.borderColor=col+'33'; }}
+                  onMouseLeave={ev => { ev.currentTarget.style.background=cardBg; ev.currentTarget.style.borderColor=sel?col+'55':'rgba(255,255,255,.06)'; }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:5 }}>
+                    {person && <div style={{ width:22, height:22, borderRadius:'50%', overflow:'hidden', flexShrink:0, border:`1.5px solid ${person.color}` }}>{person.photo?<img src={person.photo} style={{ width:'100%',height:'100%',objectFit:'cover' }}/>:<div style={{ width:'100%',height:'100%',background:person.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:'white' }}>{person.initials}</div>}</div>}
+                    <div style={{ fontSize:13, fontWeight:600, color:'#f9fafb', flex:1 }}>{e.title}</div>
+                    <span style={{ fontSize:10, fontWeight:600, padding:'1px 6px', borderRadius:3, background:col+'22', color:col, border:`1px solid ${col}44`, flexShrink:0 }}>{e.category}</span>
+                  </div>
+                  <div style={{ fontSize:12, color:'#9ca3af', lineHeight:1.5, paddingLeft:30 }}>{e.description.slice(0,130)}{e.description.length>130?'…':''}</div>
+                  {e.images?.length>0 && <div style={{ display:'flex', gap:5, marginTop:8, paddingLeft:30 }}>{e.images.slice(0,4).map((s,i)=><img key={i} src={s} style={{ width:52,height:38,objectFit:'cover',borderRadius:5,border:'1px solid #374151' }}/>)}{e.images.length>4&&<div style={{ width:52,height:38,borderRadius:5,background:'#1f2937',border:'1px solid #374151',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:'#6b7280' }}>+{e.images.length-4}</div>}</div>}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        <div style={{ height:40 }} />
+        </div>{/* end zoom wrapper */}
+      </div>
+    </div>
+  );
+};
+
+// ─── DateInput (inline date field for modals) ─────────────────────────────────
+const DateInput = ({ value, onChange, label, optional = false, autoFocus = false }) => {
+  const [raw, setRaw] = useState(() => {
+    if (value == null) return '';
+    if (typeof value === 'number') return value <= 0 ? `${Math.abs(value)} BC` : String(value);
+    return String(value);
+  });
+  const parsed = raw.trim() ? parseDate(raw) : null;
+  const valid  = !raw.trim() || parsed != null;
+  const preview = !raw.trim() ? '' : parsed != null ? displayDate(parsed) : '⚠ not recognised';
+  const handleChange = e => {
+    const v = e.target.value; setRaw(v);
+    const p = parseDate(v);
+    onChange(p != null ? p : (!v.trim() ? null : undefined));
+  };
+  return (
+    <div>
+      {label && <label style={{ fontSize:11, color:'#6b7280', display:'block', marginBottom:4 }}>
+        {label}{optional && <span style={{ color:'#374151' }}> (optional)</span>}
+      </label>}
+      <input autoFocus={autoFocus} type="text" value={raw} onChange={handleChange}
+        placeholder="100 BC · 1867 · 1867-11-07"
+        style={{ width:'100%', padding:'7px 10px', background:'#0d1117', border:`1px solid ${valid?'#374151':'#ef444466'}`, borderRadius:6, color:'#f9fafb', fontSize:13, outline:'none', boxSizing:'border-box' }}
+        onFocus={e => e.target.style.borderColor='#6366f1'} onBlur={e => e.target.style.borderColor=valid?'#374151':'#ef444466'} />
+      {preview && <div style={{ fontSize:10, color:preview.startsWith('⚠')?'#ef4444':'#4b5563', marginTop:3 }}>→ {preview}</div>}
+    </div>
+  );
+};
+
+// ─── Add Person Modal ─────────────────────────────────────────────────────────
+const PERSON_COLORS = ['#818cf8','#c084fc','#22d3ee','#f87171','#fbbf24','#4ade80','#f472b6','#60a5fa','#fb923c','#34d399'];
+const randColor = () => PERSON_COLORS[Math.floor(Math.random() * PERSON_COLORS.length)];
+
+const AddPersonModal = ({ onAdd, onClose }) => {
+  const [name, setName]   = useState('');
+  const [birth, setBirth] = useState(null);
+  const [death, setDeath] = useState(null);
+  const [role, setRole]   = useState('');
+  const [color, setColor] = useState(randColor);
+  const initials = name.split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0,2).toUpperCase() || '?';
+  const canAdd   = name.trim().length > 0;
+  const handleAdd = () => {
+    if (!canAdd) return;
+    onAdd({ id: uid(), name: name.trim(), birth: birth ?? null, death: death ?? null, role, color, initials, photo: null });
+    onClose();
+  };
+  const fld = { width:'100%', padding:'7px 10px', background:'#0d1117', border:'1px solid #374151', borderRadius:6, color:'#f9fafb', fontSize:13, outline:'none', boxSizing:'border-box' };
+  return (
+    <Modal title="Add Person" onClose={onClose} width={420}>
+      <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+          <div style={{ width:52, height:52, borderRadius:'50%', background:color, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:700, color:'white', flexShrink:0 }}>{initials}</div>
+          <div style={{ flex:1 }}>
+            <label style={{ fontSize:11, color:'#6b7280', display:'block', marginBottom:4 }}>Name *</label>
+            <input autoFocus type="text" value={name} onChange={e => setName(e.target.value)}
+              onKeyDown={e => e.key==='Enter' && handleAdd()} placeholder="e.g. Julius Caesar"
+              style={fld} onFocus={e => e.target.style.borderColor='#6366f1'} onBlur={e => e.target.style.borderColor='#374151'} />
+          </div>
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+          <DateInput label="Birth" value={birth} onChange={setBirth} />
+          <DateInput label="Death" value={death} onChange={setDeath} optional />
+        </div>
+        <div>
+          <label style={{ fontSize:11, color:'#6b7280', display:'block', marginBottom:4 }}>Role / description</label>
+          <input type="text" value={role} onChange={e => setRole(e.target.value)}
+            placeholder="e.g. Roman general and statesman"
+            style={fld} onFocus={e => e.target.style.borderColor='#6366f1'} onBlur={e => e.target.style.borderColor='#374151'} />
+        </div>
+        <div>
+          <label style={{ fontSize:11, color:'#6b7280', display:'block', marginBottom:6 }}>Colour</label>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <input type="color" value={color} onChange={e => setColor(e.target.value)}
+              style={{ width:36, height:28, border:'1px solid #374151', borderRadius:5, background:'none', cursor:'pointer', padding:2, flexShrink:0 }} />
+            <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
+              {PERSON_COLORS.map(c => (
+                <button key={c} onClick={() => setColor(c)}
+                  style={{ width:20, height:20, borderRadius:'50%', background:c, border:color===c?'2px solid white':'2px solid transparent', cursor:'pointer', padding:0, flexShrink:0 }} />
+              ))}
+            </div>
+          </div>
+        </div>
+        <div style={{ display:'flex', gap:8, justifyContent:'flex-end', paddingTop:4 }}>
+          <Btn onClick={onClose}>Cancel</Btn>
+          <Btn primary onClick={handleAdd} style={{ opacity:canAdd?1:0.5 }}>Add Person</Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+// ─── Add Event Modal ──────────────────────────────────────────────────────────
+const AddEventModal = ({ people, onAdd, onClose }) => {
+  const [title, setTitle]           = useState('');
+  const [dateStart, setDateStart]   = useState(null);
+  const [dateEnd, setDateEnd]       = useState(null);
+  const [description, setDescription] = useState('');
+  const [category, setCategory]     = useState('Historical');
+  const [personIds, setPersonIds]   = useState([]);
+  const canAdd = title.trim().length > 0 && dateStart != null;
+  const togglePerson = id => setPersonIds(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev,id]);
+  const handleAdd = () => {
+    if (!canAdd) return;
+    onAdd({ id: uid(), title: title.trim(), date_start: dateStart, date_end: dateEnd||null, description, category, person_ids: personIds, images: [] });
+    onClose();
+  };
+  const fld = { width:'100%', padding:'7px 10px', background:'#0d1117', border:'1px solid #374151', borderRadius:6, color:'#f9fafb', fontSize:13, outline:'none', boxSizing:'border-box' };
+  return (
+    <Modal title="Add Event" onClose={onClose} width={480}>
+      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+        <div>
+          <label style={{ fontSize:11, color:'#6b7280', display:'block', marginBottom:4 }}>Title *</label>
+          <input autoFocus type="text" value={title} onChange={e => setTitle(e.target.value)}
+            onKeyDown={e => e.key==='Enter' && handleAdd()} placeholder="e.g. Battle of Thermopylae"
+            style={fld} onFocus={e => e.target.style.borderColor='#6366f1'} onBlur={e => e.target.style.borderColor='#374151'} />
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+          <DateInput label="Start date *" value={dateStart} onChange={setDateStart} />
+          <DateInput label="End date" value={dateEnd} onChange={setDateEnd} optional />
+        </div>
+        <div>
+          <label style={{ fontSize:11, color:'#6b7280', display:'block', marginBottom:4 }}>Category</label>
+          <select value={category} onChange={e => setCategory(e.target.value)}
+            style={{ ...fld, cursor:'pointer' }}>
+            {ALL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{ fontSize:11, color:'#6b7280', display:'block', marginBottom:4 }}>Description</label>
+          <textarea value={description} onChange={e => setDescription(e.target.value)}
+            rows={3} placeholder="Brief description of this event…"
+            style={{ ...fld, resize:'vertical', fontFamily:'inherit', lineHeight:1.5 }}
+            onFocus={e => e.target.style.borderColor='#6366f1'} onBlur={e => e.target.style.borderColor='#374151'} />
+        </div>
+        {people.length > 0 && (
+          <div>
+            <label style={{ fontSize:11, color:'#6b7280', display:'block', marginBottom:6 }}>Associate with people</label>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+              {people.map(p => {
+                const sel = personIds.includes(p.id);
+                return (
+                  <button key={p.id} onClick={() => togglePerson(p.id)}
+                    style={{ display:'flex', alignItems:'center', gap:5, padding:'4px 10px', borderRadius:20, border:`1px solid ${sel?p.color:'#374151'}`, background:sel?p.color+'22':'none', color:sel?p.color:'#9ca3af', fontSize:12, cursor:'pointer' }}>
+                    <div style={{ width:12, height:12, borderRadius:'50%', background:p.color, flexShrink:0 }} />
+                    {p.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        <div style={{ display:'flex', gap:8, justifyContent:'flex-end', paddingTop:4 }}>
+          <Btn onClick={onClose}>Cancel</Btn>
+          <Btn primary onClick={handleAdd} style={{ opacity:canAdd?1:0.5 }}>Add Event</Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+// ─── Edit Event Modal ─────────────────────────────────────────────────────────
+const EditEventModal = ({ event, people, onSave, onClose }) => {
+  const [title, setTitle]           = useState(event.title || '');
+  const [dateStart, setDateStart]   = useState(event.date_start ?? null);
+  const [dateEnd, setDateEnd]       = useState(event.date_end ?? null);
+  const [description, setDescription] = useState(event.description || '');
+  const [category, setCategory]     = useState(event.category || 'Historical');
+  const [personIds, setPersonIds]   = useState(event.person_ids || []);
+  const canSave = title.trim().length > 0 && dateStart != null;
+  const togglePerson = id => setPersonIds(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev,id]);
+  const handleSave = () => {
+    if (!canSave) return;
+    onSave({ title: title.trim(), date_start: dateStart, date_end: dateEnd||null, description, category, person_ids: personIds });
+    onClose();
+  };
+  const fld = { width:'100%', padding:'7px 10px', background:'#0d1117', border:'1px solid #374151', borderRadius:6, color:'#f9fafb', fontSize:13, outline:'none', boxSizing:'border-box' };
+  return (
+    <Modal title="Edit Event" onClose={onClose} width={480}>
+      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+        <div>
+          <label style={{ fontSize:11, color:'#6b7280', display:'block', marginBottom:4 }}>Title *</label>
+          <input autoFocus type="text" value={title} onChange={e => setTitle(e.target.value)}
+            onKeyDown={e => e.key==='Enter' && handleSave()} style={fld}
+            onFocus={e => e.target.style.borderColor='#6366f1'} onBlur={e => e.target.style.borderColor='#374151'} />
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+          <DateInput label="Start date *" value={dateStart} onChange={setDateStart} />
+          <DateInput label="End date" value={dateEnd} onChange={setDateEnd} optional />
+        </div>
+        <div>
+          <label style={{ fontSize:11, color:'#6b7280', display:'block', marginBottom:4 }}>Category</label>
+          <select value={category} onChange={e => setCategory(e.target.value)} style={{ ...fld, cursor:'pointer' }}>
+            {ALL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{ fontSize:11, color:'#6b7280', display:'block', marginBottom:4 }}>Description</label>
+          <textarea value={description} onChange={e => setDescription(e.target.value)}
+            rows={3} style={{ ...fld, resize:'vertical', fontFamily:'inherit', lineHeight:1.5 }}
+            onFocus={e => e.target.style.borderColor='#6366f1'} onBlur={e => e.target.style.borderColor='#374151'} />
+        </div>
+        {people.length > 0 && (
+          <div>
+            <label style={{ fontSize:11, color:'#6b7280', display:'block', marginBottom:6 }}>People in this event</label>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+              {people.map(p => {
+                const sel = personIds.includes(p.id);
+                return (
+                  <button key={p.id} onClick={() => togglePerson(p.id)}
+                    style={{ display:'flex', alignItems:'center', gap:5, padding:'4px 10px', borderRadius:20, border:`1px solid ${sel?p.color:'#374151'}`, background:sel?p.color+'22':'none', color:sel?p.color:'#9ca3af', fontSize:12, cursor:'pointer' }}>
+                    <div style={{ width:12, height:12, borderRadius:'50%', background:p.color, flexShrink:0 }} />
+                    {p.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        <div style={{ display:'flex', gap:8, justifyContent:'flex-end', paddingTop:4 }}>
+          <Btn onClick={onClose}>Cancel</Btn>
+          <Btn primary onClick={handleSave} style={{ opacity:canSave?1:0.5 }}>Save Changes</Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+// ─── Edit Person Modal ────────────────────────────────────────────────────────
+const EditPersonModal = ({ person, events, onSave, onClose }) => {
+  const [name, setName]   = useState(person.name || '');
+  const [birth, setBirth] = useState(person.birth ?? null);
+  const [death, setDeath] = useState(person.death ?? null);
+  const [role, setRole]   = useState(person.role || '');
+  const [color, setColor] = useState(person.color || '#818cf8');
+  const [linkedEventIds, setLinkedEventIds] = useState(
+    () => events.filter(e => e.person_ids.includes(person.id)).map(e => e.id)
+  );
+  const initials = name.split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0,2).toUpperCase() || '?';
+  const canSave  = name.trim().length > 0;
+  const toggleEvent = id => setLinkedEventIds(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev,id]);
+  const handleSave = () => {
+    if (!canSave) return;
+    onSave({ name: name.trim(), birth: birth ?? null, death: death ?? null, role, color }, linkedEventIds);
+    onClose();
+  };
+  const fld = { width:'100%', padding:'7px 10px', background:'#0d1117', border:'1px solid #374151', borderRadius:6, color:'#f9fafb', fontSize:13, outline:'none', boxSizing:'border-box' };
+  return (
+    <Modal title="Edit Person" onClose={onClose} width={440}>
+      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+          <div style={{ width:52, height:52, borderRadius:'50%', background:color, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:700, color:'white', flexShrink:0 }}>{initials}</div>
+          <div style={{ flex:1 }}>
+            <label style={{ fontSize:11, color:'#6b7280', display:'block', marginBottom:4 }}>Name *</label>
+            <input autoFocus type="text" value={name} onChange={e => setName(e.target.value)}
+              style={fld} onFocus={e => e.target.style.borderColor='#6366f1'} onBlur={e => e.target.style.borderColor='#374151'} />
+          </div>
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+          <DateInput label="Birth" value={birth} onChange={setBirth} />
+          <DateInput label="Death" value={death} onChange={setDeath} optional />
+        </div>
+        <div>
+          <label style={{ fontSize:11, color:'#6b7280', display:'block', marginBottom:4 }}>Role / description</label>
+          <input type="text" value={role} onChange={e => setRole(e.target.value)} style={fld}
+            onFocus={e => e.target.style.borderColor='#6366f1'} onBlur={e => e.target.style.borderColor='#374151'} />
+        </div>
+        <div>
+          <label style={{ fontSize:11, color:'#6b7280', display:'block', marginBottom:6 }}>Colour</label>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <input type="color" value={color} onChange={e => setColor(e.target.value)}
+              style={{ width:36, height:28, border:'1px solid #374151', borderRadius:5, background:'none', cursor:'pointer', padding:2, flexShrink:0 }} />
+            <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
+              {PERSON_COLORS.map(c => (
+                <button key={c} onClick={() => setColor(c)}
+                  style={{ width:20, height:20, borderRadius:'50%', background:c, border:color===c?'2px solid white':'2px solid transparent', cursor:'pointer', padding:0, flexShrink:0 }} />
+              ))}
+            </div>
+          </div>
+        </div>
+        {events.length > 0 && (
+          <div>
+            <label style={{ fontSize:11, color:'#6b7280', display:'block', marginBottom:6 }}>Connected events</label>
+            <div style={{ maxHeight:160, overflowY:'auto', display:'flex', flexDirection:'column', gap:3 }}>
+              {events.map(e => {
+                const sel = linkedEventIds.includes(e.id);
+                return (
+                  <label key={e.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 8px', borderRadius:6, background:sel?'#1f2937':'none', cursor:'pointer' }}>
+                    <input type="checkbox" checked={sel} onChange={() => toggleEvent(e.id)} style={{ accentColor:'#6366f1', width:14, height:14, cursor:'pointer', flexShrink:0 }} />
+                    <span style={{ fontSize:12, color:sel?'#e5e7eb':'#6b7280' }}>{e.title}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        <div style={{ display:'flex', gap:8, justifyContent:'flex-end', paddingTop:4 }}>
+          <Btn onClick={onClose}>Cancel</Btn>
+          <Btn primary onClick={handleSave} style={{ opacity:canSave?1:0.5 }}>Save Changes</Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+// ─── Help Modal ───────────────────────────────────────────────────────────────
+const HELP_SECTIONS = [
+  {
+    id: 'getting-started', title: 'Getting Started',
+    content: () => (
+      <div>
+        <p style={{marginTop:0}}>Timeline is a visual timeline builder. Open it in your browser via <code>http://localhost:8765</code> (requires the Python server running).</p>
+        <h4>Quick start</h4>
+        <ol style={{paddingLeft:18,lineHeight:1.8}}>
+          <li>Click <b>New</b> to create a fresh timeline (or load the sample data).</li>
+          <li>Add people with <b>+ Person</b> (top-right area of the top bar).</li>
+          <li>Add events with <b>+ Add Event</b>.</li>
+          <li>Click any event bar or point to open its detail panel.</li>
+          <li>Click <b>Save</b> to keep your work in the browser's localStorage.</li>
+        </ol>
+        <h4>Three views</h4>
+        <ul style={{paddingLeft:18,lineHeight:1.8}}>
+          <li><b>Horizontal</b> — swimlane timeline (one row per person), drag to pan, scroll to zoom.</li>
+          <li><b>Vertical</b> — card-based scrolling view, oldest or newest first.</li>
+          <li><b>Data</b> — spreadsheet grid for bulk editing.</li>
+        </ul>
+        <p>Switch views with the <b>⇕ / ⇔</b> orientation button or the view tabs in each toolbar.</p>
+      </div>
+    ),
+  },
+  {
+    id: 'people', title: 'People',
+    content: () => (
+      <div>
+        <h4>Adding a person</h4>
+        <p>Click <b>+ Person</b> in the top bar or the <b>＋</b> button in the sidebar header. Fill in name, birth/death dates, role, and choose a colour. The avatar preview shows initials live.</p>
+        <h4>Editing a person</h4>
+        <p>Hover over a person row in the sidebar — a pencil <b>✏</b> button appears. Click it to open the Edit Person modal. You can update all fields and check/uncheck which events this person is connected to.</p>
+        <h4>Photos</h4>
+        <p>Click the avatar circle in the sidebar to upload a photo (JPG, PNG, GIF, WebP, SVG). It is auto-resized to 300×300 and stored in the timeline. The photo appears in the sidebar, event detail panel, timeline group label, and vertical timeline cards.</p>
+        <h4>Toggling visibility</h4>
+        <p>Click a person's name/row in the sidebar to toggle them on or off the timeline. Hidden people's events are also hidden.</p>
+      </div>
+    ),
+  },
+  {
+    id: 'events', title: 'Events',
+    content: () => (
+      <div>
+        <h4>Adding an event</h4>
+        <p>Click <b>+ Add Event</b> in the top bar. Fill in title, start date (required), optional end date, category, description, and pick which people to associate.</p>
+        <h4>Point vs range events</h4>
+        <ul style={{paddingLeft:18,lineHeight:1.8}}>
+          <li>No end date → shown as a <b>point</b> marker.</li>
+          <li>With end date → shown as a <b>coloured bar</b> spanning the date range.</li>
+        </ul>
+        <h4>Editing an event</h4>
+        <p>Click the event bar/point to open the detail panel, then click the <b>✏</b> pencil button in the panel header.</p>
+        <h4>Categories &amp; colours</h4>
+        <p>7 built-in categories: Religion, Politics, Science, Aviation, Historical, Award, Personal — each with its own colour. Toggle categories on/off in the sidebar.</p>
+        <h4>Event images</h4>
+        <p>In the event detail panel click <b>+ Add</b> to attach one or more images. Images are displayed as a 2-column thumbnail grid with click-to-lightbox. A 🖼 flag appears on the timeline bar when an event has images.</p>
+      </div>
+    ),
+  },
+  {
+    id: 'connections', title: 'Connecting People & Events',
+    content: () => (
+      <div>
+        <h4>Quick-toggle in the event panel</h4>
+        <p>Click any event bar/point to open the detail panel. The <b>People</b> section shows every person as a coloured chip. Click a chip to instantly link or unlink that person from the event — no modal required.</p>
+        <h4>Via Edit Event modal</h4>
+        <p>Open Edit Event (✏ in the panel header). The people section at the bottom shows all people as chips — highlighted ones are currently linked. Click to toggle, then Save Changes.</p>
+        <h4>Via Edit Person modal</h4>
+        <p>Hover over a person in the sidebar → click ✏. The <b>Connected events</b> checklist shows all events. Check or uncheck to add or remove connections. Saving updates both the person and every affected event at once.</p>
+      </div>
+    ),
+  },
+  {
+    id: 'views', title: 'Views',
+    content: () => (
+      <div>
+        <h4>Horizontal view</h4>
+        <ul style={{paddingLeft:18,lineHeight:1.8}}>
+          <li>Swimlane layout — one row per visible person.</li>
+          <li>Drag left/right to pan; scroll wheel to zoom.</li>
+          <li>Toolbar: Fit All, Zoom In/Out, year-jump buttons.</li>
+          <li>When zoomed to &lt;80 years visible, event bars show their first image inline.</li>
+          <li><b>🌈 Sections</b> button opens the background sections editor (see Backgrounds &amp; Eras).</li>
+        </ul>
+        <h4>Vertical view</h4>
+        <ul style={{paddingLeft:18,lineHeight:1.8}}>
+          <li>Card-based scroll — each event is a card with date, title, description, people, and images.</li>
+          <li>Sort toggle: oldest-first or newest-first.</li>
+          <li>Zoom control (−/+/Reset) scales the entire card layout from 40% to 300%.</li>
+          <li>Era banners inject between cards when the era changes.</li>
+          <li><b>🌈 Sections</b> button opens the background sections editor.</li>
+        </ul>
+        <h4>Data view (spreadsheet)</h4>
+        <ul style={{paddingLeft:18,lineHeight:1.8}}>
+          <li>Two grids: People and Events.</li>
+          <li>Click a cell to edit inline — type-aware inputs (text, date, select, colour, person multi-select).</li>
+          <li>Keyboard: Enter = commit, Tab = next cell, Esc = cancel.</li>
+          <li>Hover a row → delete button appears.</li>
+          <li>Click the <b>+</b> row at the bottom to add a new record.</li>
+          <li>Date cells open the <b>DateEntryWidget</b> (see Date Formats).</li>
+        </ul>
+      </div>
+    ),
+  },
+  {
+    id: 'zoom', title: 'Zoom & Navigation',
+    content: () => (
+      <div>
+        <h4>Horizontal timeline</h4>
+        <ul style={{paddingLeft:18,lineHeight:1.8}}>
+          <li><b>Scroll wheel</b> — zoom in/out centred on the cursor.</li>
+          <li><b>Click &amp; drag</b> — pan left/right.</li>
+          <li><b>Fit All</b> button — zoom to show all events at once.</li>
+          <li><b>Zoom In / Zoom Out</b> buttons in the toolbar.</li>
+          <li>Quick-jump year buttons: jump to specific decades or periods.</li>
+        </ul>
+        <h4>Vertical timeline</h4>
+        <ul style={{paddingLeft:18,lineHeight:1.8}}>
+          <li><b>− / + / Reset</b> buttons in the toolbar scale the whole card layout (40%–300%).</li>
+          <li>The percentage is shown on the Reset button.</li>
+          <li>CSS zoom scales cards, text, images, and avatars proportionally.</li>
+        </ul>
+        <h4>Lightbox (image viewer)</h4>
+        <ul style={{paddingLeft:18,lineHeight:1.8}}>
+          <li>Click any event image thumbnail to open the lightbox.</li>
+          <li><b>Scroll wheel</b> — zoom up to 10×.</li>
+          <li><b>Drag</b> — pan the zoomed image.</li>
+          <li><b>Double-click</b> — reset zoom &amp; pan.</li>
+          <li>Bottom bar: − / zoom% / + / Reset buttons.</li>
+          <li>Click outside the image or press × to close.</li>
+        </ul>
+      </div>
+    ),
+  },
+  {
+    id: 'images', title: 'Images & Media',
+    content: () => (
+      <div>
+        <h4>Person photos</h4>
+        <p>Click the avatar circle in the sidebar to upload a photo. Supported: JPG, PNG, GIF, WebP, SVG. Auto-resized to 300×300. Stored as base64 in the timeline data.</p>
+        <h4>Event images</h4>
+        <p>Open an event's detail panel → click <b>+ Add</b>. Multiple images per event are supported. Each image is resized to max 800×600. Thumbnails appear in a 2-column grid; click any thumbnail to open the lightbox. Click ✕ to remove an image.</p>
+        <h4>Images in the timeline</h4>
+        <ul style={{paddingLeft:18,lineHeight:1.8}}>
+          <li><b>Horizontal view</b> — when zoomed to &lt;80 visible years, event bars with images show the first image inline inside the bar.</li>
+          <li><b>Vertical view</b> — event cards show thumbnail images; zoom scales them along with the card.</li>
+          <li>Events with images are marked with a 🖼 icon on the horizontal bar at wider zoom levels.</li>
+        </ul>
+        <h4>Storage note</h4>
+        <p>All images are stored as base64 strings in the browser's localStorage. Very large or many images may approach browser storage limits. The SQLite backend (Stage 3) will move files to disk.</p>
+      </div>
+    ),
+  },
+  {
+    id: 'backgrounds', title: 'Backgrounds & Eras',
+    content: () => (
+      <div>
+        <h4>Default background</h4>
+        <p>Click <b>🎨 Default BG</b> in the top bar to open the background settings. Choose:</p>
+        <ul style={{paddingLeft:18,lineHeight:1.8}}>
+          <li><b>Solid colour</b> — pick any colour.</li>
+          <li><b>Gradient</b> — two colours + 8 direction presets.</li>
+          <li><b>Photo</b> — upload an image (auto-resized to 1920×1080).</li>
+        </ul>
+        <p>A live preview swatch is shown. The background applies to the main timeline area.</p>
+        <h4>Background sections (Eras)</h4>
+        <p>Click <b>🌈 Sections</b> in the horizontal or vertical toolbar. Each section covers a year range and has its own background (solid / gradient / photo). Sections appear as coloured bands behind the timeline.</p>
+        <ul style={{paddingLeft:18,lineHeight:1.8}}>
+          <li>Click <b>+ Add Section</b> to create a new era.</li>
+          <li>5 quick-add presets available: Ancient, Medieval, Early Modern, Modern, Contemporary.</li>
+          <li>Click 🎨 on any section row to expand its background editor.</li>
+          <li>The <b>🎨 Default BG</b> button in the editor sets the fallback for time outside any section.</li>
+          <li>Era labels appear at the bottom-left of each section in the horizontal view.</li>
+          <li>Vertical view shows full-width era banner rows between event cards.</li>
+        </ul>
+      </div>
+    ),
+  },
+  {
+    id: 'dates', title: 'Date Formats',
+    content: () => (
+      <div>
+        <h4>Entering dates</h4>
+        <p>Dates can be entered in multiple formats:</p>
+        <ul style={{paddingLeft:18,lineHeight:1.8}}>
+          <li><code>4 BC</code> or <code>4BC</code> — BC year</li>
+          <li><code>33 AD</code> or <code>33</code> — AD year</li>
+          <li><code>1867</code> — four-digit year</li>
+          <li><code>1867-11-07</code> — ISO date (full precision)</li>
+          <li><code>25/12/1867</code> — dd/mm/yyyy</li>
+          <li><code>-4</code> — negative integer (= 4 BC)</li>
+        </ul>
+        <h4>DataGrid DateEntryWidget</h4>
+        <p>Click a date cell in the Data view to open the floating date panel. It has two tabs:</p>
+        <ul style={{paddingLeft:18,lineHeight:1.8}}>
+          <li><b>Year (BC/AD)</b> — integer year with AD/BC toggle, for ancient dates.</li>
+          <li><b>Full date</b> — native date picker or dd/mm/yyyy free text, for precise dates.</li>
+        </ul>
+        <p>Enter = commit · Esc = cancel · Click outside = cancel</p>
+        <h4>Display format</h4>
+        <p>Use the <b>Dates:</b> dropdown in the top bar to choose how dates are displayed:</p>
+        <ul style={{paddingLeft:18,lineHeight:1.8}}>
+          <li><b>BC / AD</b> — e.g. <em>4 BC · 33 AD · 1867</em></li>
+          <li><b>Signed</b> — e.g. <em>−4 · 33 · 1867</em></li>
+          <li><b>Full date</b> — e.g. <em>7 Nov 1867 · 4 BC</em></li>
+        </ul>
+        <p>The format change is instant and propagates to all views.</p>
+      </div>
+    ),
+  },
+  {
+    id: 'import-export', title: 'Import & Export',
+    content: () => (
+      <div>
+        <h4>Save / Open (localStorage)</h4>
+        <ul style={{paddingLeft:18,lineHeight:1.8}}>
+          <li><b>Save</b> — saves the current timeline (people, events, eras, backgrounds) to browser localStorage under the timeline name.</li>
+          <li><b>Open</b> — lists all saved timelines. Click to open; ✕ to delete.</li>
+          <li><b>New</b> — create a new named timeline (blank or with sample data).</li>
+        </ul>
+        <h4>JSON export / import</h4>
+        <ul style={{paddingLeft:18,lineHeight:1.8}}>
+          <li><b>Export JSON</b> — downloads the full timeline as a <code>.json</code> file (backup / sharing).</li>
+          <li><b>Import JSON</b> — in the Open modal, use the file picker to load a previously exported JSON file.</li>
+        </ul>
+        <h4>CSV import / export</h4>
+        <p>Available in the <b>Data view</b> toolbar:</p>
+        <ul style={{paddingLeft:18,lineHeight:1.8}}>
+          <li><b>Import CSV</b> — drag-and-drop or file picker; preview first 5 rows; choose Merge or Replace mode. Separate tabs for People and Events.</li>
+          <li><b>Export CSV</b> — downloads current People or Events as a <code>.csv</code> file.</li>
+          <li><b>Download Template</b> — blank CSV with correct column headers.</li>
+        </ul>
+      </div>
+    ),
+  },
+  {
+    id: 'claude-ai', title: 'Claude AI',
+    content: () => (
+      <div>
+        <h4>Opening the AI panel</h4>
+        <p>Click <b>🤖 Claude</b> in the top bar, or the floating <b>🤖</b> button at the bottom-right of the screen.</p>
+        <h4>What Claude can do</h4>
+        <ul style={{paddingLeft:18,lineHeight:1.8}}>
+          <li>Answer questions about your timeline data.</li>
+          <li>Suggest people or events to add — shown as action cards with a <b>+ Add to Timeline</b> button.</li>
+          <li>Suggest edits to existing people or events — shown as amber <b>✏ Apply Edit</b> cards.</li>
+          <li>Describe relationships, generate summaries, or help fill in details.</li>
+        </ul>
+        <h4>Action cards</h4>
+        <p>When Claude proposes adding or editing data, a card appears in the chat. Click the button on the card to apply the change instantly — no copy-paste required.</p>
+        <h4>Setup</h4>
+        <p>The AI panel requires the Python server (<code>python server.py</code>) and an Anthropic API key set as the <code>ANTHROPIC_API_KEY</code> environment variable. If the server is not running, the panel shows a warning.</p>
+      </div>
+    ),
+  },
+];
+
+const HelpModal = ({ onClose }) => {
+  const [activeId, setActiveId] = React.useState(HELP_SECTIONS[0].id);
+  const activeSection = HELP_SECTIONS.find(s => s.id === activeId) || HELP_SECTIONS[0];
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.72)', zIndex:900, display:'flex', alignItems:'center', justifyContent:'center' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ background:'#111827', border:'1px solid #1f2937', borderRadius:14, width:'min(820px,95vw)', height:'min(640px,90vh)', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 25px 60px rgba(0,0,0,.6)' }}>
+        {/* header */}
+        <div style={{ display:'flex', alignItems:'center', padding:'14px 20px', borderBottom:'1px solid #1f2937', flexShrink:0 }}>
+          <span style={{ fontSize:18, fontWeight:700, color:'#f9fafb', flex:1 }}>Help &amp; Feature Guide</span>
+          <button onClick={onClose} style={{ background:'none', border:'none', color:'#9ca3af', fontSize:20, cursor:'pointer', lineHeight:1 }}>×</button>
+        </div>
+        {/* body */}
+        <div style={{ display:'flex', flex:1, overflow:'hidden' }}>
+          {/* sidebar nav */}
+          <div style={{ width:180, borderRight:'1px solid #1f2937', overflowY:'auto', flexShrink:0, padding:'10px 0' }}>
+            {HELP_SECTIONS.map(s => (
+              <div key={s.id} onClick={() => setActiveId(s.id)}
+                style={{ padding:'8px 16px', fontSize:13, cursor:'pointer', borderLeft:`3px solid ${activeId===s.id ? '#6366f1' : 'transparent'}`,
+                  background: activeId===s.id ? '#1f2937' : 'transparent',
+                  color: activeId===s.id ? '#a5b4fc' : '#9ca3af',
+                  transition:'background .15s' }}>
+                {s.title}
+              </div>
+            ))}
+          </div>
+          {/* content */}
+          <div style={{ flex:1, overflowY:'auto', padding:'20px 28px', color:'#d1d5db', fontSize:13, lineHeight:1.65 }}>
+            <h3 style={{ marginTop:0, color:'#f9fafb', fontSize:16, fontWeight:700, paddingBottom:10, borderBottom:'1px solid #1f2937' }}>{activeSection.title}</h3>
+            <activeSection.content />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Top Bar ──────────────────────────────────────────────────────────────────
+// ─── Claude AI Panel ──────────────────────────────────────────────────────────
+const ClaudePanel = ({ people, events, eras, onAddPerson, onAddEvent, onEditPerson, onEditEvent, onClose }) => {
+  const [apiMsgs, setApiMsgs] = useState([]);
+  const [display, setDisplay] = useState([]);
+  const [input, setInput]     = useState('');
+  const [loading, setLoading] = useState(false);
+  const [serverOk, setServerOk] = useState(null); // null=unknown, true, false
+  const endRef = useRef(null);
+
+  // Check if backend is running on mount
+  useEffect(() => {
+    fetch('/health').then(r => r.ok ? setServerOk(true) : setServerOk(false)).catch(() => setServerOk(false));
+  }, []);
+
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [display]);
+
+  const sendMessage = async () => {
+    if (!input.trim() || loading) return;
+    const userText = input.trim();
+    setInput('');
+    const newApiMsgs = [...apiMsgs, { role: 'user', content: userText }];
+    setApiMsgs(newApiMsgs);
+    setDisplay(prev => [
+      ...prev,
+      { role: 'user', content: userText },
+      { role: 'assistant', content: '', streaming: true, appliedKeys: new Set() },
+    ]);
+    setLoading(true);
+    try {
+      const res = await fetch('/api/claude', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: newApiMsgs,
+          context: {
+            people: people.map(p => ({ id: p.id, name: p.name, birth: p.birth, death: p.death, role: p.role })),
+            events: events.map(e => ({ id: e.id, title: e.title, start: e.date_start, end: e.date_end, category: e.category, description: e.description, person_ids: e.person_ids })),
+            eras,
+          },
+        }),
+      });
+      if (!res.ok) { throw new Error(`Server returned ${res.status}`); }
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText  = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        for (const line of chunk.split('\n')) {
+          if (!line.startsWith('data: ')) continue;
+          let d;
+          try { d = JSON.parse(line.slice(6)); } catch { continue; }
+          if (d.type === 'text') {
+            fullText += d.text;
+            setDisplay(prev => {
+              const u = [...prev];
+              u[u.length - 1] = { ...u[u.length - 1], content: fullText };
+              return u;
+            });
+          } else if (d.type === 'done') {
+            setDisplay(prev => {
+              const u = [...prev];
+              u[u.length - 1] = { ...u[u.length - 1], streaming: false };
+              return u;
+            });
+            setApiMsgs(m => [...m, { role: 'assistant', content: fullText }]);
+          } else if (d.type === 'error') {
+            fullText = `⚠ ${d.message}`;
+            setDisplay(prev => {
+              const u = [...prev];
+              u[u.length - 1] = { ...u[u.length - 1], content: fullText, streaming: false, error: true };
+              return u;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      setDisplay(prev => {
+        const u = [...prev];
+        u[u.length - 1] = { ...u[u.length - 1], content: `⚠ ${e.message}`, streaming: false, error: true };
+        return u;
+      });
+    }
+    setLoading(false);
+  };
+
+  // Parse message content into text and action-block segments
+  const parseBlocks = (content) => {
+    const parts = [];
+    const re = /```json\n(\{[\s\S]*?\})\n```/g;
+    let last = 0, m;
+    while ((m = re.exec(content)) !== null) {
+      if (m.index > last) parts.push({ type: 'text', content: content.slice(last, m.index) });
+      try {
+        const data = JSON.parse(m[1]);
+        if (['add_person','add_event','edit_person','edit_event'].includes(data.action)) {
+          parts.push({ type: 'action', data, key: m.index });
+        } else {
+          parts.push({ type: 'text', content: m[0] });
+        }
+      } catch {
+        parts.push({ type: 'text', content: m[0] });
+      }
+      last = m.index + m[0].length;
+    }
+    if (last < content.length) parts.push({ type: 'text', content: content.slice(last) });
+    return parts;
+  };
+
+  const applyAction = (msgIdx, actionKey, data) => {
+    if (data.action === 'add_person') onAddPerson(data);
+    else if (data.action === 'add_event') onAddEvent(data);
+    else if (data.action === 'edit_person') onEditPerson(data);
+    else if (data.action === 'edit_event') onEditEvent(data);
+    setDisplay(prev => {
+      const u = [...prev];
+      u[msgIdx] = { ...u[msgIdx], appliedKeys: new Set([...(u[msgIdx].appliedKeys || []), actionKey]) };
+      return u;
+    });
+  };
+
+  const fmtYear = y => {
+    if (y == null) return '?';
+    if (typeof y === 'number') return y <= 0 ? `${Math.abs(y)} BC` : `${y} AD`;
+    return String(y).slice(0, 4);
+  };
+
+  const renderAssistant = (msg, msgIdx) => {
+    const blocks = parseBlocks(msg.content);
+    return (
+      <div key={msgIdx} style={{ alignSelf: 'flex-start', maxWidth: '96%', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {blocks.map((b, bi) => {
+          if (b.type === 'text') {
+            const txt = b.content.trim();
+            if (!txt) return null;
+            return (
+              <div key={bi} style={{ background: '#1f2937', color: '#e5e7eb', padding: '9px 13px', borderRadius: '12px 12px 12px 2px', fontSize: 13, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                {txt}
+              </div>
+            );
+          }
+          // Action card
+          const d = b.data;
+          const isAdd    = d.action === 'add_person' || d.action === 'add_event';
+          const isPerson = d.action === 'add_person' || d.action === 'edit_person';
+          const isEdit   = d.action === 'edit_person' || d.action === 'edit_event';
+          const applied  = (msg.appliedKeys || new Set()).has(b.key);
+          const accent   = isPerson ? '#818cf8' : '#34d399';
+          const editColor = '#fbbf24';
+          const cardAccent = isEdit ? editColor : accent;
+          // For edit cards, try to find the matching existing record
+          const existingPerson = isEdit && isPerson ? people.find(p => p.id === d.id || p.name === d.name) : null;
+          const existingEvent  = isEdit && !isPerson ? events.find(e => String(e.id) === String(d.id) || e.title === d.title) : null;
+          return (
+            <div key={bi} style={{ background: '#0d1117', border: `1px solid ${applied ? '#374151' : cardAccent}44`, borderRadius: 10, padding: '10px 13px', opacity: applied ? 0.6 : 1 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: cardAccent, marginBottom: 5 }}>
+                {d.action === 'add_person' ? '👤 Add Person' : d.action === 'add_event' ? '📅 Add Event' : d.action === 'edit_person' ? '✏️ Edit Person' : '✏️ Edit Event'}
+              </div>
+              <div style={{ color: '#f9fafb', fontWeight: 600, fontSize: 13 }}>{d.name || d.title}</div>
+              {isPerson && (d.birth != null || d.death != null) && (
+                <div style={{ color: '#9ca3af', fontSize: 11, marginTop: 2 }}>
+                  {d.birth != null ? fmtYear(d.birth) : '?'} – {d.death != null ? fmtYear(d.death) : '?'}
+                  {d.role ? ` · ${d.role}` : ''}
+                </div>
+              )}
+              {!isPerson && (
+                <div style={{ color: '#9ca3af', fontSize: 11, marginTop: 2 }}>
+                  {fmtYear(d.start)}{d.end ? ` – ${fmtYear(d.end)}` : ''}
+                  {d.category ? ` · ${d.category}` : ''}
+                </div>
+              )}
+              {d.description && (
+                <div style={{ color: '#6b7280', fontSize: 11, marginTop: 3, lineHeight: 1.5 }}>{d.description}</div>
+              )}
+              {isEdit && !existingPerson && !existingEvent && (
+                <div style={{ color: '#ef4444', fontSize: 10, marginTop: 3 }}>⚠ Person/event not found in current timeline</div>
+              )}
+              {!applied && (
+                <button onClick={() => applyAction(msgIdx, b.key, d)}
+                  style={{ marginTop: 8, padding: '4px 14px', background: cardAccent + '22', border: `1px solid ${cardAccent}66`, borderRadius: 6, color: cardAccent, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  {isEdit ? '✏ Apply Edit' : '+ Add to Timeline'}
+                </button>
+              )}
+              {applied && <div style={{ marginTop: 8, fontSize: 11, color: '#4b5563' }}>✓ {isEdit ? 'Applied' : 'Added'}</div>}
+            </div>
+          );
+        })}
+        {msg.streaming && <span style={{ color: '#6b7280', fontSize: 13 }}>▌</span>}
+      </div>
+    );
+  };
+
+  const SUGGESTIONS = [
+    'Add all Roman emperors from Augustus to Constantine',
+    'What connections do you see in my current timeline?',
+    'Suggest 5 pioneering women scientists to add',
+    'Fill in gaps in the timeline between the people I have',
+    'Update roles and descriptions for the people already on my timeline',
+  ];
+
+  return (
+    <div style={{ position: 'fixed', bottom: 76, right: 20, width: 390, height: 520, background: '#111827', border: '1px solid #374151', borderRadius: 14, display: 'flex', flexDirection: 'column', zIndex: 600, boxShadow: '0 24px 64px rgba(0,0,0,.85)' }}>
+      {/* Header */}
+      <div style={{ padding: '11px 16px', borderBottom: '1px solid #1f2937', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg,#6366f1,#a855f7)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>🤖</div>
+          <div>
+            <div style={{ color: '#f9fafb', fontWeight: 700, fontSize: 13 }}>Claude AI</div>
+            <div style={{ fontSize: 10, color: serverOk === false ? '#ef4444' : '#4ade80' }}>
+              {serverOk === null ? '…' : serverOk ? 'Connected' : 'Server offline — run server.py'}
+            </div>
+          </div>
+        </div>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '2px 6px' }}>✕</button>
+      </div>
+
+      {/* Messages */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {display.length === 0 && (
+          <div style={{ padding: '20px 0' }}>
+            <div style={{ color: '#4b5563', fontSize: 13, textAlign: 'center', marginBottom: 16 }}>
+              <div style={{ fontSize: 28, marginBottom: 6 }}>🏛️</div>
+              Ask Claude to help build your timeline
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {SUGGESTIONS.map((s, i) => (
+                <button key={i} onClick={() => setInput(s)}
+                  style={{ background: '#1f2937', border: '1px solid #374151', borderRadius: 8, padding: '7px 11px', color: '#9ca3af', fontSize: 11, cursor: 'pointer', textAlign: 'left', lineHeight: 1.4 }}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {display.map((msg, i) => (
+          msg.role === 'user'
+            ? <div key={i} style={{ alignSelf: 'flex-end', background: '#4f46e5', color: '#fff', padding: '8px 13px', borderRadius: '12px 12px 2px 12px', maxWidth: '85%', fontSize: 13, lineHeight: 1.5, wordBreak: 'break-word' }}>{msg.content}</div>
+            : renderAssistant(msg, i)
+        ))}
+        <div ref={endRef} />
+      </div>
+
+      {/* Input */}
+      <div style={{ padding: '10px 12px', borderTop: '1px solid #1f2937', display: 'flex', gap: 7, flexShrink: 0 }}>
+        <input value={input} onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+          placeholder="Ask Claude about history…"
+          disabled={serverOk === false}
+          style={{ flex: 1, padding: '8px 12px', background: '#0d1117', border: '1px solid #374151', borderRadius: 8, color: '#f9fafb', fontSize: 13, outline: 'none', opacity: serverOk === false ? 0.5 : 1 }} />
+        <button onClick={sendMessage} disabled={loading || !input.trim() || serverOk === false}
+          style={{ padding: '8px 14px', background: (loading || !input.trim() || serverOk === false) ? '#1f2937' : '#6366f1', color: '#fff', border: 'none', borderRadius: 8, cursor: (loading || !input.trim()) ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 700, flexShrink: 0 }}>
+          {loading ? '…' : '↑'}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ─── Top Bar ───────────────────────────────────────────────────────────────────
+const TopBar = ({ timelineName, searchQuery, setSearchQuery, onNew, onOpen, onSave, onExport, saveMsg, dateFormat, setDateFormat, onBg, onClaude, onAddPerson, onAddEvent, onHelp }) => (
+  <div style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 18px', background:'#0d1117', borderBottom:'1px solid #1f2937', flexShrink:0 }}>
+    <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
+      <div style={{ width:28, height:28, borderRadius:8, background:'linear-gradient(135deg,#6366f1,#818cf8)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <span style={{ color:'white', fontSize:14, fontWeight:700 }}>T</span>
+      </div>
+      <div>
+        <div style={{ fontSize:13, fontWeight:600, color:'#f9fafb', maxWidth:180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{timelineName}</div>
+        <div style={{ fontSize:10, color:'#4b5563' }}>Timeline</div>
+      </div>
+    </div>
+    <div style={{ display:'flex', gap:4, flexShrink:0 }}>
+      <Btn small onClick={onNew}>New</Btn>
+      <Btn small onClick={onOpen}>Open</Btn>
+      <Btn small onClick={onSave} style={{ color: saveMsg ? '#4ade80' : '#9ca3af' }}>{saveMsg || 'Save'}</Btn>
+      <Btn small onClick={onExport}>Export JSON</Btn>
+      <Btn small onClick={onBg}>🎨 Default BG</Btn>
+    </div>
+    <div style={{ flex:1, maxWidth:320 }}>
+      <input type="text" placeholder="Search events…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+        style={{ width:'100%', background:'#1f2937', border:'1px solid #374151', borderRadius:8, padding:'6px 12px', fontSize:13, color:'#f9fafb', outline:'none', boxSizing:'border-box' }}
+        onFocus={e => e.target.style.borderColor='#6366f1'} onBlur={e => e.target.style.borderColor='#374151'} />
+    </div>
+    <div style={{ display:'flex', alignItems:'center', gap:6, marginLeft:'auto', flexShrink:0 }}>
+      <label style={{ fontSize:11, color:'#4b5563', flexShrink:0 }}>Dates:</label>
+      <select value={dateFormat} onChange={e => setDateFormat(e.target.value)}
+        title={DATE_FMTS.find(f=>f.value===dateFormat)?.example}
+        style={{ fontSize:11, padding:'3px 6px', background:'#1f2937', border:'1px solid #374151', borderRadius:6, color:'#9ca3af', cursor:'pointer', outline:'none' }}>
+        {DATE_FMTS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+      </select>
+      <Btn small onClick={onAddPerson} style={{ background:'#6366f122', border:'1px solid #6366f144', color:'#a5b4fc' }}>+ Person</Btn>
+      <Btn primary small onClick={onAddEvent}>+ Add Event</Btn>
+      <Btn onClick={onClaude} style={{ background: 'linear-gradient(135deg,#6366f1,#a855f7)', color: '#fff', border: 'none', fontWeight: 600 }}>🤖 Claude</Btn>
+      <Btn onClick={onHelp} title="Help" style={{ background:'#1f2937', border:'1px solid #374151', color:'#9ca3af', fontWeight:700, minWidth:30 }}>?</Btn>
+    </div>
+  </div>
+);
+
+// ─── App Root ─────────────────────────────────────────────────────────────────
+const App = () => {
+  const [timelineName, setTimelineName]             = useState('Sample Timeline');
+  const [people, setPeople]                         = useState(SAMPLE_PEOPLE);
+  const [events, setEvents]                         = useState(SAMPLE_EVENTS);
+  const [selectedPeople, setSelectedPeople]         = useState(() => new Set(SAMPLE_PEOPLE.map(p => p.id)));
+  const [selectedCategories, setSelectedCategories] = useState(() => new Set(ALL_CATEGORIES));
+  const [selectedEvent, setSelectedEvent]           = useState(null);
+  const [searchQuery, setSearchQuery]               = useState('');
+  const [orientation, setOrientation]               = useState('horizontal');
+  const [showNew, setShowNew]                       = useState(false);
+  const [showOpen, setShowOpen]                     = useState(false);
+  const [saveMsg, setSaveMsg]                       = useState('');
+  const [dateFormat, setDateFormat]                 = useState('bcad');
+  const [bgSettings, setBgSettings]                 = useState(DEFAULT_BG);
+  const [showBg, setShowBg]                         = useState(false);
+  const [eras, setEras]                             = useState(DEFAULT_ERAS);
+  const [showEras, setShowEras]                     = useState(false);
+  const [showClaude, setShowClaude]                 = useState(false);
+  const [showAddPerson, setShowAddPerson]           = useState(false);
+  const [showAddEvent, setShowAddEvent]             = useState(false);
+  const [editPersonTarget, setEditPersonTarget]     = useState(null); // person object to edit
+  const [editEventTarget, setEditEventTarget]       = useState(null); // event object to edit
+  const [showHelp, setShowHelp]                     = useState(false);
+
+  const loadTimeline = useCallback((name, newPeople, newEvents, newEras = null, newBg = null) => {
+    setTimelineName(name); setPeople(newPeople); setEvents(newEvents);
+    setSelectedPeople(new Set(newPeople.map(p => p.id))); setSelectedCategories(new Set(ALL_CATEGORIES));
+    setSelectedEvent(null); setSearchQuery(''); setShowNew(false); setShowOpen(false);
+    if (newEras !== null) setEras(newEras);
+    if (newBg   !== null) setBgSettings(newBg);
+  }, []);
+
+  const handleNew    = (name, withSample) => loadTimeline(name, withSample ? SAMPLE_PEOPLE : [], withSample ? SAMPLE_EVENTS : [], [], DEFAULT_BG);
+  const handleLoad   = (name, p, e, newEras = [], newBg = null) => loadTimeline(name, p, e, newEras, newBg);
+  const handleSave   = () => { saveToStorage(timelineName, people, events, eras, bgSettings); setSaveMsg('Saved ✓'); setTimeout(() => setSaveMsg(''), 2200); };
+  const handleExport = () => exportJSON(timelineName, people, events, eras, bgSettings);
+
+  const handleAddPerson = useCallback((person) => {
+    setPeople(prev => [...prev, person]);
+    setSelectedPeople(prev => new Set([...prev, person.id]));
+  }, []);
+
+  const handleAddEvent = useCallback((event) => {
+    setEvents(prev => [...prev, event]);
+  }, []);
+
+  // Edit person — updates person fields and syncs event connections
+  const handleEditPerson = useCallback((personId, updates, linkedEventIds) => {
+    const newName = updates.name || '';
+    setPeople(prev => prev.map(p => {
+      if (p.id !== personId) return p;
+      return {
+        ...p, ...updates,
+        initials: newName.split(/\s+/).map(w => w[0]||'').join('').slice(0,2).toUpperCase() || '?',
+      };
+    }));
+    // Sync event connections: add/remove personId from each event's person_ids
+    setEvents(prev => prev.map(e => {
+      const shouldLink = linkedEventIds.includes(e.id);
+      const alreadyLinked = e.person_ids.includes(personId);
+      if (shouldLink === alreadyLinked) return e;
+      return {
+        ...e,
+        person_ids: shouldLink
+          ? [...e.person_ids, personId]
+          : e.person_ids.filter(id => id !== personId),
+      };
+    }));
+  }, []);
+
+  // Edit event — updates all event fields including person_ids
+  const handleEditEvent = useCallback((eventId, updates) => {
+    setEvents(prev => prev.map(e => e.id === eventId ? { ...e, ...updates } : e));
+  }, []);
+
+  // Quick toggle person on/off for an event (from EventPanel chips)
+  const handleUpdateEventPersonIds = useCallback((eventId, newPersonIds) => {
+    setEvents(prev => prev.map(e => e.id === eventId ? { ...e, person_ids: newPersonIds } : e));
+  }, []);
+
+  const handleUpdatePersonPhoto = useCallback((personId, photo) => setPeople(prev => prev.map(p => p.id===personId ? { ...p, photo } : p)), []);
+  const handleUploadEventImage  = useCallback((eventId, dataUrl) => setEvents(prev => prev.map(e => e.id===eventId ? { ...e, images:[...(e.images||[]), dataUrl] } : e)), []);
+  const handleRemoveEventImage  = useCallback((eventId, idx)     => setEvents(prev => prev.map(e => e.id===eventId ? { ...e, images:(e.images||[]).filter((_,i) => i!==idx) } : e)), []);
+
+  // Claude AI — add/edit person/event from assistant suggestions
+  const handleClaudeAddPerson = useCallback((data) => {
+    const name = data.name || 'Unknown';
+    const newPerson = {
+      id: uid(), name,
+      birth:    data.birth  != null ? data.birth  : null,
+      death:    data.death  != null ? data.death  : null,
+      role:     data.role   || '',
+      color:    data.color  || '#818cf8',
+      initials: name.split(/\s+/).map(w => w[0] || '').join('').slice(0, 2).toUpperCase() || '?',
+      photo:    null,
+    };
+    setPeople(prev => [...prev, newPerson]);
+    setSelectedPeople(prev => new Set([...prev, newPerson.id]));
+  }, []);
+
+  const handleClaudeAddEvent = useCallback((data) => {
+    setEvents(prev => [...prev, {
+      id: uid(), title: data.title || 'Untitled Event',
+      date_start: data.start ?? 0, date_end: data.end || null,
+      description: data.description || '', category: data.category || 'Historical',
+      person_ids: [], images: [],
+    }]);
+  }, []);
+
+  const handleClaudeEditPerson = useCallback((data) => {
+    setPeople(prev => prev.map(p => {
+      if (p.id !== data.id && p.name !== data.name) return p;
+      const name = data.name || p.name;
+      return {
+        ...p, name,
+        ...(data.birth  != null ? { birth:    data.birth  } : {}),
+        ...(data.death  != null ? { death:    data.death  } : {}),
+        ...(data.role               ? { role:     data.role   } : {}),
+        ...(data.color              ? { color:    data.color  } : {}),
+        initials: name.split(/\s+/).map(w => w[0]||'').join('').slice(0,2).toUpperCase() || '?',
+      };
+    }));
+  }, []);
+
+  const handleClaudeEditEvent = useCallback((data) => {
+    setEvents(prev => prev.map(e => {
+      if (String(e.id) !== String(data.id) && e.title !== data.title) return e;
+      return {
+        ...e,
+        ...(data.title       ? { title:       data.title       } : {}),
+        ...(data.start  != null ? { date_start: data.start      } : {}),
+        ...(data.end    != null ? { date_end:   data.end        } : {}),
+        ...(data.description ? { description: data.description } : {}),
+        ...(data.category    ? { category:    data.category    } : {}),
+      };
+    }));
+  }, []);
+
+  const visiblePeople = useMemo(() => people.filter(p => selectedPeople.has(p.id)), [people, selectedPeople]);
+  const filteredEvents = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return events.filter(e => {
+      if (!e.person_ids.some(id => selectedPeople.has(id))) return false;
+      if (!selectedCategories.has(e.category)) return false;
+      if (q && !e.title.toLowerCase().includes(q) && !e.description.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [events, selectedPeople, selectedCategories, searchQuery]);
+
+  useEffect(() => { if (selectedEvent && !filteredEvents.find(e => e.id===selectedEvent.id)) setSelectedEvent(null); }, [filteredEvents]);
+  const liveEvent = useMemo(() => selectedEvent ? (events.find(e => e.id===selectedEvent.id)||null) : null, [selectedEvent, events]);
+
+  return (
+    <DateFmtCtx.Provider value={dateFormat}>
+    <div style={{ display:'flex', flexDirection:'column', height:'100vh', background:'#0a0f1e' }}>
+      <TopBar timelineName={timelineName} searchQuery={searchQuery} setSearchQuery={setSearchQuery}
+        onNew={() => setShowNew(true)} onOpen={() => setShowOpen(true)}
+        onSave={handleSave} onExport={handleExport} saveMsg={saveMsg}
+        dateFormat={dateFormat} setDateFormat={setDateFormat}
+        onBg={() => setShowBg(true)} onClaude={() => setShowClaude(c => !c)}
+        onAddPerson={() => setShowAddPerson(true)} onAddEvent={() => setShowAddEvent(true)}
+        onHelp={() => setShowHelp(true)} />
+      <div style={{ flex:1, display:'flex', overflow:'hidden', background:bgToCss(bgSettings) }}>
+        {orientation !== 'data' && (
+          <Sidebar people={people} events={events}
+            selectedPeople={selectedPeople} setSelectedPeople={setSelectedPeople}
+            selectedCategories={selectedCategories} setSelectedCategories={setSelectedCategories}
+            onUpdatePersonPhoto={handleUpdatePersonPhoto}
+            onAddPerson={() => setShowAddPerson(true)}
+            onEditPerson={p => setEditPersonTarget(p)} />
+        )}
+
+        {orientation === 'horizontal' && <HorizontalTimeline events={filteredEvents} people={visiblePeople} onSelectEvent={setSelectedEvent} setOrientation={setOrientation} eras={eras} onEditEras={() => setShowEras(true)} />}
+        {orientation === 'vertical'   && <VerticalTimeline   events={filteredEvents} people={visiblePeople} onSelectEvent={setSelectedEvent} selectedEvent={liveEvent} setOrientation={setOrientation} eras={eras} onEditEras={() => setShowEras(true)} />}
+        {orientation === 'data'       && <DataView people={people} events={events} setPeople={setPeople} setEvents={setEvents} orientation={orientation} setOrientation={setOrientation} />}
+
+        {liveEvent && orientation !== 'data' && (
+          <EventPanel event={liveEvent} people={people} onClose={() => setSelectedEvent(null)}
+            onUploadImage={handleUploadEventImage} onRemoveImage={handleRemoveEventImage}
+            onUpdatePersonIds={handleUpdateEventPersonIds}
+            onEditEvent={() => setEditEventTarget(liveEvent)} />
+        )}
+      </div>
+      {showNew       && <NewTimelineModal  onConfirm={handleNew}  onClose={() => setShowNew(false)}  />}
+      {showOpen      && <OpenTimelineModal onLoad={handleLoad}    onClose={() => setShowOpen(false)} />}
+      {showBg        && <BgSettingsModal  bg={bgSettings} onSave={setBgSettings} onClose={() => setShowBg(false)} />}
+      {showEras      && <EraEditorModal   eras={eras}     onSave={setEras}       onClose={() => setShowEras(false)} />}
+      {showAddPerson && <AddPersonModal onAdd={p => { handleAddPerson(p); setShowAddPerson(false); }} onClose={() => setShowAddPerson(false)} />}
+      {showAddEvent  && <AddEventModal  people={people} onAdd={e => { handleAddEvent(e); setShowAddEvent(false); }} onClose={() => setShowAddEvent(false)} />}
+      {editPersonTarget && (
+        <EditPersonModal
+          person={editPersonTarget} events={events}
+          onSave={(updates, linkedEventIds) => { handleEditPerson(editPersonTarget.id, updates, linkedEventIds); setEditPersonTarget(null); }}
+          onClose={() => setEditPersonTarget(null)} />
+      )}
+      {editEventTarget && (
+        <EditEventModal
+          event={editEventTarget} people={people}
+          onSave={updates => { handleEditEvent(editEventTarget.id, updates); setEditEventTarget(null); if (liveEvent?.id === editEventTarget.id) setSelectedEvent(prev => prev ? { ...prev, ...updates } : prev); }}
+          onClose={() => setEditEventTarget(null)} />
+      )}
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
+      {showClaude && (
+        <ClaudePanel
+          people={people} events={events} eras={eras}
+          onAddPerson={handleClaudeAddPerson}
+          onAddEvent={handleClaudeAddEvent}
+          onEditPerson={handleClaudeEditPerson}
+          onEditEvent={handleClaudeEditEvent}
+          onClose={() => setShowClaude(false)}
+        />
+      )}
+      {/* Claude floating toggle button — always visible when panel is closed */}
+      {!showClaude && (
+        <button onClick={() => setShowClaude(true)}
+          title="Open Claude AI assistant"
+          style={{ position: 'fixed', bottom: 20, right: 20, width: 52, height: 52, borderRadius: '50%', background: 'linear-gradient(135deg,#6366f1,#a855f7)', border: 'none', cursor: 'pointer', fontSize: 22, boxShadow: '0 4px 20px rgba(99,102,241,.5)', zIndex: 599, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          🤖
+        </button>
+      )}
+    </div>
+    </DateFmtCtx.Provider>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
