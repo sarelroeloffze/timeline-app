@@ -44,7 +44,8 @@
       "Bash(lsof -ti:8765)",
       "Bash(xargs kill:*)",
       "Bash(curl -s http://localhost:8765)",
-      "Bash(ls -lht index*.html)"
+      "Bash(ls -lht index*.html)",
+      "Bash(curl -I http://localhost:8765)"
     ]
   }
 }

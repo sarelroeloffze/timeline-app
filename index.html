@@ -6294,7 +6294,7 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
   const { catColor, catNames } = useCat();
   const containerRef = useRef(null), timelineRef = useRef(null), itemsRef = useRef(null), groupsRef = useRef(null);
   const tlWrapRef = useRef(null);
-  const overlayRef = useRef(null), erasRef = useRef(eras);
+  const erasRef = useRef(eras);
   erasRef.current = eras;
   const arcsRef = useRef(arcs);
   arcsRef.current = arcs;
@@ -6326,6 +6326,13 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
   const [contentH, setContentH] = useState(600);
   const [scrollY, setScrollY] = useState(0);
   const [viewportH, setViewportH] = useState(600);
+  // ── Calculate timeline height from row count (formula-based, not DOM-measured) ──
+  const calcHeight = useMemo(() => {
+    const activeCivs = civilizations.filter(c => c.showOnTimeline !== false);
+    const rowCount = people.length + (activeCivs.length > 0 ? 1 : 0);
+    const rowH = hs.rowHeight || 44;
+    return Math.max(rowCount * (rowH + 10) + 60, 400);
+  }, [people.length, civilizations, hs.rowHeight]);
   // ── Drag-to-reschedule state ──────────────────────────────────────────────────
   const [dragLocked, setDragLocked] = useState(false);
   const dragLockedRef = useRef(false);
@@ -6333,107 +6340,6 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
   const undoStack = useRef([]); // [{ eventId, prevStart, prevEnd }, …]  max 20
   const [dragMoveMsg, setDragMoveMsg] = useState(''); // confirmation toast
   const dragMoveMsgTimer = useRef(null);
-  // Draw per-section backgrounds behind the timeline content
-  const redrawEras = useCallback(() => {
-    const tl = timelineRef.current, overlay = overlayRef.current;
-    if (!tl || !overlay) return;
-    const win = tl.getWindow();
-    const winStart = win.start.getTime(), winEnd = win.end.getTime(), winDur = winEnd - winStart;
-    const center = containerRef.current?.querySelector('.vis-panel.vis-center');
-    const axisPanel = containerRef.current?.querySelector('.vis-panel.vis-top');
-    const itemset = containerRef.current?.querySelector('.vis-itemset');
-    const foreground = containerRef.current?.querySelector('.vis-foreground');
-    const w = center ? center.clientWidth : 0;
-    const leftPanel = containerRef.current?.querySelector('.vis-panel.vis-left');
-    const leftW = (leftPanel?.clientWidth || 0) > 0 ? leftPanel.clientWidth : 42;  // Default to 42px if panel not found or has 0 width
-    const topOffset = axisPanel ? axisPanel.offsetHeight : 0;
-
-    // Calculate full content height from itemset/foreground (not just visible panel height)
-    let fullH = itemset ? itemset.scrollHeight : 0;
-    if (foreground) {
-      fullH = Math.max(fullH, foreground.scrollHeight || 0);
-      if (foreground.children.length > 0) {
-        const sumKids = Array.from(foreground.children).reduce((sum, child) => {
-          return sum + child.getBoundingClientRect().height;
-        }, 0);
-        fullH = Math.max(fullH, sumKids);
-      }
-    }
-
-    overlay.style.left = leftW + 'px';
-    overlay.style.width = w + 'px';
-    overlay.style.top = topOffset + 'px';
-    overlay.style.height = fullH + 'px';
-
-    // Debug logging
-    console.log('[redrawEras] topOffset:', topOffset, 'fullH:', fullH, 'leftW:', leftW, 'w:', w);
-
-    overlay.innerHTML = '';
-    for (const era of erasRef.current) {
-      const s = makeYear(era.yearStart).getTime();
-      const e = era.yearEnd != null ? makeYear(era.yearEnd).getTime() : win.end.getTime() + winDur;
-      const x1 = (s - winStart) / winDur * w;
-      const x2 = (e - winStart) / winDur * w;
-      const cx1 = Math.max(0, x1), cx2 = Math.min(w, x2);
-      if (cx2 <= cx1) continue;
-
-      // Resolve this era's background (fall back gracefully for old eras without bg)
-      const bg = era.bg || { type:'solid', color: era.color || '#1a1f2e', color2:'#2d3748', dir:'to right', photo:null };
-
-      // For photo backgrounds we calculate an offset so the image appears to stretch
-      // continuously across the visible window rather than repeating per section
-      let bgStyle = '';
-      if (bg.type === 'photo' && bg.photo) {
-        // Position the image so its left edge aligns with x1 relative to the overlay,
-        // giving the illusion the photo covers the full timeline span for this section.
-        const offsetX = -cx1; // shift image left by the hidden portion
-        bgStyle = `background:url('${bg.photo}') ${offsetX}px 0/auto 100% no-repeat;`;
-      } else if (bg.type === 'gradient') {
-        bgStyle = `background:linear-gradient(${bg.dir||'to right'},${bg.color},${bg.color2||'#2d3748'});`;
-      } else {
-        bgStyle = `background:${bg.color||'#1a1f2e'};`;
-      }
-
-      const div = document.createElement('div');
-      div.style.cssText = `position:absolute;top:0;left:${cx1}px;width:${cx2-cx1}px;height:100%;${bgStyle}pointer-events:none;overflow:hidden;`;
-
-      // Era label — DISABLED to avoid positioning issues
-      // Labels were appearing at wrong positions causing confusion
-      // if (cx2 - cx1 > 46) {
-      //   const lbl = document.createElement('div');
-      //   lbl.textContent = era.label;
-      //   lbl.style.cssText = `position:absolute;bottom:6px;left:7px;font-size:10px;color:${era.color||'#9ca3af'};font-weight:700;letter-spacing:.06em;text-transform:uppercase;text-shadow:0 1px 4px rgba(0,0,0,.9);pointer-events:none;white-space:nowrap;`;
-      //   div.appendChild(lbl);
-      // }
-      overlay.appendChild(div);
-    }
-    // Draw arc bands on top of era backgrounds (lower opacity, top-aligned strip)
-    const allArcs = arcsRef.current || [];
-    const allEvents = eventsRef.current || [];
-    for (const arc of allArcs) {
-      const arcEvents = (arc.eventIds||[]).map(id => allEvents.find(e => String(e.id) === String(id))).filter(Boolean);
-      if (arcEvents.length === 0) continue;
-      const dates = arcEvents.map(e => makeYear(typeof e.date_start === 'number' ? e.date_start : parseInt(e.date_start)).getTime());
-      const minT = Math.min(...dates), maxT = Math.max(...dates);
-      if (!isFinite(minT) || !isFinite(maxT)) continue;
-      const x1 = (minT - winStart) / winDur * w;
-      const x2 = ((maxT > minT ? maxT : minT + 1000*60*60*24*365) - winStart) / winDur * w;
-      const cx1 = Math.max(0, x1), cx2 = Math.min(w, x2);
-      if (cx2 <= cx1) continue;
-      const arcDiv = document.createElement('div');
-      arcDiv.style.cssText = `position:absolute;top:0;left:${cx1}px;width:${cx2-cx1}px;height:8px;background:${arc.color||'#6366F1'};opacity:0.35;pointer-events:none;border-radius:0 0 3px 3px;`;
-      if (cx2 - cx1 > 60) {
-        const arcLbl = document.createElement('div');
-        arcLbl.textContent = arc.name;
-        arcLbl.style.cssText = `position:absolute;top:1px;left:6px;font-size:9px;color:#fff;font-weight:700;letter-spacing:.04em;pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${cx2-cx1-12}px;`;
-        arcDiv.appendChild(arcLbl);
-      }
-      overlay.appendChild(arcDiv);
-    }
-  }, []);
-
-  // Re-draw arcs whenever arcs change
-  useEffect(() => { setTimeout(() => redrawEras(), 0); }, [arcs, redrawEras]);
 
   // ── Draw marker lines on top of the vis-timeline ──
   const updateMarkerLines = useCallback(() => {
@@ -6701,6 +6607,7 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
       const h3 = axisPanel?.offsetHeight || 0;
       const h = Math.max(h1, h2) + h3 + 20;
       console.log('[Scroll Debug] updateContentHeight - before:', { h1, h2, h3, finalH: h, currentContentH: contentH });
+      console.log('[HEIGHT DEBUG]', 'measured:', h, 'currentContentH:', contentH);
       setContentH(h);
       // Check wrapper height after state update on next tick
       setTimeout(() => {
@@ -6756,7 +6663,7 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
       setVisYearSpan(Math.round(span));
       setRulerView({ start: win.start.getFullYear(), end: win.end.getFullYear() });
     });
-    tl.on('changed', () => { setTimeout(() => { redrawEras(); updateMarkerLines(); updateContentHeight(); }, 0); });
+    tl.on('changed', () => { setTimeout(() => { updateMarkerLines(); updateContentHeight(); }, 0); });
     return () => {
       tlWrapRef.current?.removeEventListener('scroll', onScroll);
       ro.disconnect();
@@ -6764,11 +6671,7 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
       tl.destroy();
       timelineRef.current = null;
     };
-  }, [redrawEras, updateMarkerLines]);
-
-  // Re-draw era bands whenever eras array changes
-  useEffect(() => { setTimeout(() => redrawEras(), 0); }, [eras, redrawEras]);
-  useEffect(() => { timelineRef.current?.redraw(); setTimeout(() => redrawEras(), 0); }, [hs.showLabels]);
+  }, [updateMarkerLines]);
 
   useEffect(() => {
     const ds = groupsRef.current; if (!ds) return;
@@ -6787,17 +6690,14 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
     if (activeCivs.length > 0) {
       ds.add({ id: '__civs__', content: '🏛', title: 'Civilizations', style: 'border-left:4px solid #c084fc;', order: -1 });
     }
-    // Calculate height for vis-timeline internal rendering based on row count
-    const rowCount = people.length + (activeCivs.length > 0 ? 1 : 0);
-    const rowH = hs.rowHeight || 44;
-    const calcHeight = Math.max(rowCount * (rowH + 10) + 60, 400);
+    // Set vis-timeline height using the calculated value from useMemo
     timelineRef.current?.setOptions({ height: calcHeight });
-    console.log('[Scroll Debug] vis-timeline height set to:', calcHeight, 'for', rowCount, 'rows');
+    console.log('[Scroll Debug] vis-timeline height set to:', calcHeight);
     // Reset scroll to top when people change, then redraw and measure actual height
     if (tlWrapRef.current) tlWrapRef.current.scrollTop = 0;
     setTimeout(() => {
       timelineRef.current?.redraw();
-      redrawEras();
+      console.log('[CONTAINER HEIGHT]', 'containerRef.offsetHeight:', containerRef.current?.offsetHeight, 'vis-timeline.offsetHeight:', containerRef.current?.querySelector('.vis-timeline')?.offsetHeight);
       // Let updateContentHeight measure and set contentH after DOM settles
       setTimeout(() => {
         const labelSet = containerRef.current?.querySelector('.vis-labelset');
@@ -6811,7 +6711,7 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
         setContentH(actualH);
       }, 100);
     }, 10);
-  }, [people, dateFmt, civilizations, hs.rowHeight]);
+  }, [people, dateFmt, civilizations, hs.rowHeight, calcHeight]);
 
   const showImgInBar = visYearSpan < 80; // show images inside bars when zoomed in
   useEffect(() => {
@@ -6834,6 +6734,35 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
         style: `background: linear-gradient(to bottom, transparent 0, transparent calc(50% - 2px), ${p.color}bb calc(50% - 2px), ${p.color}bb calc(50% + 2px), transparent calc(50% + 2px), transparent 100%);`,
         selectable: false,
         editable: false,
+      });
+    });
+    // ── Era background bands: one background item per era × group ──
+    const allGroups = [...people.map(p => p.id), '__civs__'];
+    erasRef.current.forEach(era => {
+      allGroups.forEach(groupId => {
+        const eraStart = makeYear(era.yearStart);
+        const eraEnd = era.yearEnd != null ? makeYear(era.yearEnd) : makeYear(2040);
+        // Resolve this era's background (fall back gracefully for old eras without bg)
+        const bg = era.bg || { type:'solid', color: era.color || '#1a1f2e', color2:'#2d3748', dir:'to right', photo:null };
+        let bgStyle = '';
+        if (bg.type === 'photo' && bg.photo) {
+          bgStyle = `background:url('${bg.photo}') center/cover no-repeat;`;
+        } else if (bg.type === 'gradient') {
+          bgStyle = `background:linear-gradient(${bg.dir||'to right'},${bg.color},${bg.color2||'#2d3748'});`;
+        } else {
+          bgStyle = `background:${bg.color||'#1a1f2e'};`;
+        }
+        ds.add({
+          id: `__era__${era.id}__${groupId}`,
+          type: 'background',
+          group: groupId,
+          start: eraStart,
+          end: eraEnd,
+          content: '',
+          style: `${bgStyle}opacity:0.15;`,
+          selectable: false,
+          editable: false,
+        });
       });
     });
     ds.add(events.map(e => {
@@ -7035,8 +6964,7 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
       {/* Timeline viewport with native browser scroll */}
       <div style={{ flex:1, display:'flex', minHeight:0, position:'relative' }}>
         <div ref={tlWrapRef} style={{ flex:1, minHeight:0, overflowY:'auto', overflowX:'hidden', position:'relative' }}>
-          <div style={{ position:'relative', height: contentH + 'px' }}>
-            <div ref={overlayRef} style={{ position:'absolute', pointerEvents:'none', zIndex:0 }} />
+          <div style={{ position:'relative', height: calcHeight + 'px' }}>
             <div ref={containerRef} style={{ width:'100%', position:'relative', zIndex:1 }} />
             <div ref={markersLayerRef} style={{ position:'absolute', pointerEvents:'none', zIndex:2 }} />
           </div>
