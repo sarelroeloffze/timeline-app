@@ -1,0 +1,231 @@
+Yeah — there are a few **real issues and potential pitfalls** in your code. Nothing catastrophic, but some things will definitely bite you later. I’ll keep it practical:
+
+---
+
+## ⚠️ 1. Babel in production (big one)
+
+You’re using:
+
+```html
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="text/babel">
+```
+
+**Problem:**
+
+* This compiles JSX **in the browser at runtime**
+* It’s **slow**, especially for a large app like yours
+* Not suitable beyond demos
+
+**Fix:**
+Use a build step (Vite, Webpack, etc.) and ship plain JS.
+
+---
+
+## ⚠️ 2. Massive single file (maintainability issue)
+
+Your entire app is inside one HTML file.
+
+**Problem:**
+
+* Hard to debug
+* Hard to scale
+* React components aren’t modular
+* Re-renders and state logic will become messy
+
+**Fix:**
+Split into:
+
+* `App.jsx`
+* `components/`
+* `utils/` (your date helpers belong here)
+
+---
+
+## ⚠️ 3. Date parsing is fragile
+
+Example:
+
+```js
+const toSortYear = d => typeof d === 'number' ? d : parseInt(String(d));
+```
+
+**Problem:**
+
+* `parseInt("1867-11-07") → 1867` (works accidentally)
+* `parseInt("c. 300 BC") → NaN`
+* No validation
+
+Also:
+
+```js
+const yr = parseInt(s.slice(0, 4));
+```
+
+Breaks for:
+
+* negative years (`-500`)
+* malformed strings
+
+**Fix:**
+Use a proper parser:
+
+```js
+const extractYear = (d) => {
+  if (typeof d === 'number') return d;
+  const match = String(d).match(/-?\d+/);
+  return match ? parseInt(match[0]) : null;
+};
+```
+
+---
+
+## ⚠️ 4. Potential bug in `calcNavPoints`
+
+```js
+const n = Math.min(maxBtns, totalSpan + 1);
+```
+
+**Problem:**
+If span is huge (e.g. -5000 → 2025), `totalSpan` is ~7000 → OK
+But spacing becomes weird and rounding creates duplicates.
+
+Also:
+
+```js
+Math.round(minYr + (totalSpan * i / (n - 1)))
+```
+
+When `n === 1`, division by zero risk (you partially guard earlier, but still brittle).
+
+---
+
+## ⚠️ 5. React without keys / structure (likely issue)
+
+Not visible in snippet, but given size:
+
+* You’re likely rendering lists without stable keys somewhere
+* vis-timeline + React can conflict if DOM is mutated outside React
+
+**Watch for:**
+
+* flickering
+* stale UI
+* memory leaks
+
+---
+
+## ⚠️ 6. Global CSS overrides (risky)
+
+You’re doing a lot like:
+
+```css
+.vis-item { ... !important; }
+```
+
+**Problem:**
+
+* Hard to override later
+* Can break library updates
+* Debugging styles becomes painful
+
+---
+
+## ⚠️ 7. Accessibility is good—but incomplete
+
+You did nice work here (skip link, focus-visible 👍)
+
+But missing:
+
+* ARIA roles on dynamic timeline
+* keyboard navigation for timeline items
+* screen reader labeling for interactive elements
+
+---
+
+## ⚠️ 8. Performance concerns
+
+You’re loading a lot:
+
+* React (dev build!)
+* Leaflet
+* vis-timeline
+* html2canvas
+* jsPDF
+* pptxgen
+
+**Problems:**
+
+* Heavy initial load
+* No lazy loading
+* React dev build is slower
+
+**Fix:**
+
+* Use production React:
+
+```html
+react.production.min.js
+```
+
+* Lazy-load heavy libs (PDF, PPT)
+
+---
+
+## ⚠️ 9. No error boundaries
+
+If anything crashes in React → whole app dies.
+
+Add:
+
+```js
+class ErrorBoundary extends React.Component {
+  ...
+}
+```
+
+---
+
+## ⚠️ 10. Inline state logic risk
+
+You’re using:
+
+```js
+const { useState, useEffect, ... } = React;
+```
+
+That’s fine, but in a file this large:
+
+* state coupling becomes dangerous
+* debugging side effects gets hard
+
+---
+
+## 👍 What’s actually good
+
+Not everything is broken:
+
+* Your **date formatting system is solid**
+* i18n structure is well thought out
+* accessibility effort is above average
+* timeline styling is clean and intentional
+
+---
+
+## 🧠 Bottom line
+
+Your app is **impressive but at “prototype stretched too far” stage**.
+
+### Biggest priorities:
+
+1. Move off Babel → proper build system
+2. Split into components/files
+3. Fix date parsing robustness
+4. Reduce bundle weight
+
+---
+
+If you want, I can:
+
+* Refactor this into a clean React project structure
+* Or point out **actual runtime bugs** (not just risks) if you’re seeing specific issues

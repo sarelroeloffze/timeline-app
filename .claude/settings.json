@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "FileChanged": [
+      {
+        "matcher": "Team Inbox",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.file_path // .path // \"\"' 2>/dev/null); if [ -n \"$FILE\" ] && [ -f \"$FILE\" ]; then CONTENT=$(cat \"$FILE\"); printf '{\"hookSpecificOutput\": {\"hookEventName\": \"FileChanged\", \"additionalContext\": \"LARRY — new task file dropped in Team Inbox.\\nFile: %s\\nContents:\\n%s\\n\\nPlease read this task, identify the right team member, and action it.\"}}\n' \"$FILE\" \"$CONTENT\"; exit 2; fi",
+            "asyncRewake": true,
+            "statusMessage": "LARRY picking up new Team Inbox task..."
+          }
+        ]
+      }
+    ]
+  }
+}

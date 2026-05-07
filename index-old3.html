@@ -6320,7 +6320,6 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
   const [rulerSpacing,setRulerSpacing]= useState(1);
   const [showHorizStyle, setShowHorizStyle] = useState(false);
   const [showReorder, setShowReorder] = useState(false);
-  const [fitAllActive, setFitAllActive] = useState(false);
   // ── Native browser scroll state ───────────────────────────────────────────────
   // contentH tracks actual vis-timeline content height via observers
   const [contentH, setContentH] = useState(600);
@@ -6341,33 +6340,15 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
     const winStart = win.start.getTime(), winEnd = win.end.getTime(), winDur = winEnd - winStart;
     const center = containerRef.current?.querySelector('.vis-panel.vis-center');
     const axisPanel = containerRef.current?.querySelector('.vis-panel.vis-top');
-    const itemset = containerRef.current?.querySelector('.vis-itemset');
-    const foreground = containerRef.current?.querySelector('.vis-foreground');
     const w = center ? center.clientWidth : 0;
-    const leftPanel = containerRef.current?.querySelector('.vis-panel.vis-left');
-    const leftW = (leftPanel?.clientWidth || 0) > 0 ? leftPanel.clientWidth : 42;  // Default to 42px if panel not found or has 0 width
+    const leftW = containerRef.current?.querySelector('.vis-panel.vis-left')?.clientWidth || 0;
     const topOffset = axisPanel ? axisPanel.offsetHeight : 0;
-
-    // Calculate full content height from itemset/foreground (not just visible panel height)
-    let fullH = itemset ? itemset.scrollHeight : 0;
-    if (foreground) {
-      fullH = Math.max(fullH, foreground.scrollHeight || 0);
-      if (foreground.children.length > 0) {
-        const sumKids = Array.from(foreground.children).reduce((sum, child) => {
-          return sum + child.getBoundingClientRect().height;
-        }, 0);
-        fullH = Math.max(fullH, sumKids);
-      }
-    }
-
+    const centerH = center ? center.offsetHeight : 0;
     overlay.style.left = leftW + 'px';
     overlay.style.width = w + 'px';
     overlay.style.top = topOffset + 'px';
+    const fullH = containerRef.current?.scrollHeight || centerH;
     overlay.style.height = fullH + 'px';
-
-    // Debug logging
-    console.log('[redrawEras] topOffset:', topOffset, 'fullH:', fullH, 'leftW:', leftW, 'w:', w);
-
     overlay.innerHTML = '';
     for (const era of erasRef.current) {
       const s = makeYear(era.yearStart).getTime();
@@ -6397,14 +6378,13 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
       const div = document.createElement('div');
       div.style.cssText = `position:absolute;top:0;left:${cx1}px;width:${cx2-cx1}px;height:100%;${bgStyle}pointer-events:none;overflow:hidden;`;
 
-      // Era label — DISABLED to avoid positioning issues
-      // Labels were appearing at wrong positions causing confusion
-      // if (cx2 - cx1 > 46) {
-      //   const lbl = document.createElement('div');
-      //   lbl.textContent = era.label;
-      //   lbl.style.cssText = `position:absolute;bottom:6px;left:7px;font-size:10px;color:${era.color||'#9ca3af'};font-weight:700;letter-spacing:.06em;text-transform:uppercase;text-shadow:0 1px 4px rgba(0,0,0,.9);pointer-events:none;white-space:nowrap;`;
-      //   div.appendChild(lbl);
-      // }
+      // Era label — shown when section is wide enough
+      if (cx2 - cx1 > 46) {
+        const lbl = document.createElement('div');
+        lbl.textContent = era.label;
+        lbl.style.cssText = `position:absolute;bottom:6px;left:7px;font-size:10px;color:${era.color||'#9ca3af'};font-weight:700;letter-spacing:.06em;text-transform:uppercase;text-shadow:0 1px 4px rgba(0,0,0,.9);pointer-events:none;white-space:nowrap;`;
+        div.appendChild(lbl);
+      }
       overlay.appendChild(div);
     }
     // Draw arc bands on top of era backgrounds (lower opacity, top-aligned strip)
@@ -6433,7 +6413,7 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
   }, []);
 
   // Re-draw arcs whenever arcs change
-  useEffect(() => { setTimeout(() => redrawEras(), 0); }, [arcs, redrawEras]);
+  useEffect(() => { redrawEras(); }, [arcs, redrawEras]);
 
   // ── Draw marker lines on top of the vis-timeline ──
   const updateMarkerLines = useCallback(() => {
@@ -6443,28 +6423,14 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
     const winStart = win.start.getTime(), winEnd = win.end.getTime(), winDur = winEnd - winStart;
     const center = containerRef.current?.querySelector('.vis-panel.vis-center');
     const axisPanel = containerRef.current?.querySelector('.vis-panel.vis-top');
-    const itemset = containerRef.current?.querySelector('.vis-itemset');
-    const foreground = containerRef.current?.querySelector('.vis-foreground');
     const w = center ? center.clientWidth : 0;
-    const leftPanel = containerRef.current?.querySelector('.vis-panel.vis-left');
-    const leftW = (leftPanel?.clientWidth || 0) > 0 ? leftPanel.clientWidth : 42;  // Default to 42px if panel not found or has 0 width
+    const leftW = containerRef.current?.querySelector('.vis-panel.vis-left')?.clientWidth || 0;
     const topOffset = axisPanel ? axisPanel.offsetHeight : 0;
-
-    // Calculate full content height from itemset/foreground (not just visible panel height)
-    let fullH = itemset ? itemset.scrollHeight : 0;
-    if (foreground) {
-      fullH = Math.max(fullH, foreground.scrollHeight || 0);
-      if (foreground.children.length > 0) {
-        const sumKids = Array.from(foreground.children).reduce((sum, child) => {
-          return sum + child.getBoundingClientRect().height;
-        }, 0);
-        fullH = Math.max(fullH, sumKids);
-      }
-    }
-
+    const centerH = center ? center.offsetHeight : 0;
     container.style.left   = leftW + 'px';
     container.style.width  = w + 'px';
     container.style.top    = topOffset + 'px';
+    const fullH = containerRef.current?.scrollHeight || centerH;
     container.style.height = fullH + 'px';
     container.innerHTML    = '';
     if (winDur <= 0 || w <= 0) return;
@@ -6490,7 +6456,7 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
   }, []);
 
   // Re-draw marker lines whenever markers change
-  useEffect(() => { setTimeout(() => updateMarkerLines(), 0); }, [markers, updateMarkerLines]);
+  useEffect(() => { updateMarkerLines(); }, [markers, updateMarkerLines]);
 
   // ── Inject CSS overrides when horizStyle changes ──
   useEffect(() => {
@@ -6700,14 +6666,7 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
       const h2 = centerContent?.scrollHeight || 0;
       const h3 = axisPanel?.offsetHeight || 0;
       const h = Math.max(h1, h2) + h3 + 20;
-      console.log('[Scroll Debug] updateContentHeight - before:', { h1, h2, h3, finalH: h, currentContentH: contentH });
       setContentH(h);
-      // Check wrapper height after state update on next tick
-      setTimeout(() => {
-        const wrapperDiv = containerRef.current?.parentElement;
-        const actualWrapperHeight = wrapperDiv?.style.height;
-        console.log('[Scroll Debug] updateContentHeight - after setContentH:', { setTo: h, wrapperStyleHeight: actualWrapperHeight });
-      }, 0);
       if (tlWrapRef.current) setViewportH(tlWrapRef.current.clientHeight);
     };
 
@@ -6767,7 +6726,7 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
   }, [redrawEras, updateMarkerLines]);
 
   // Re-draw era bands whenever eras array changes
-  useEffect(() => { setTimeout(() => redrawEras(), 0); }, [eras, redrawEras]);
+  useEffect(() => { redrawEras(); }, [eras, redrawEras]);
   useEffect(() => { timelineRef.current?.redraw(); setTimeout(() => redrawEras(), 0); }, [hs.showLabels]);
 
   useEffect(() => {
@@ -6787,30 +6746,15 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
     if (activeCivs.length > 0) {
       ds.add({ id: '__civs__', content: '🏛', title: 'Civilizations', style: 'border-left:4px solid #c084fc;', order: -1 });
     }
-    // Calculate height for vis-timeline internal rendering based on row count
+    // Calculate height based on row count: ~55px per row + axis (~50px)
     const rowCount = people.length + (activeCivs.length > 0 ? 1 : 0);
     const rowH = hs.rowHeight || 44;
     const calcHeight = Math.max(rowCount * (rowH + 10) + 60, 400);
     timelineRef.current?.setOptions({ height: calcHeight });
-    console.log('[Scroll Debug] vis-timeline height set to:', calcHeight, 'for', rowCount, 'rows');
-    // Reset scroll to top when people change, then redraw and measure actual height
+    setContentH(calcHeight);
+    // Reset scroll to top when people change, then redraw
     if (tlWrapRef.current) tlWrapRef.current.scrollTop = 0;
-    setTimeout(() => {
-      timelineRef.current?.redraw();
-      redrawEras();
-      // Let updateContentHeight measure and set contentH after DOM settles
-      setTimeout(() => {
-        const labelSet = containerRef.current?.querySelector('.vis-labelset');
-        const centerContent = containerRef.current?.querySelector('.vis-panel.vis-center .vis-content');
-        const axisPanel = containerRef.current?.querySelector('.vis-panel.vis-top');
-        const h1 = labelSet?.scrollHeight || 0;
-        const h2 = centerContent?.scrollHeight || 0;
-        const h3 = axisPanel?.offsetHeight || 0;
-        const actualH = Math.max(h1, h2) + h3 + 20;
-        console.log('[Scroll Debug] After redraw - measured actual height:', actualH, '- updating contentH');
-        setContentH(actualH);
-      }, 100);
-    }, 10);
+    setTimeout(() => { timelineRef.current?.redraw(); redrawEras(); }, 10);
   }, [people, dateFmt, civilizations, hs.rowHeight]);
 
   const showImgInBar = visYearSpan < 80; // show images inside bars when zoomed in
@@ -6888,8 +6832,6 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
   const goTo = (yr, sp=30) => timelineRef.current?.setWindow(makeYear(yr-Math.round(sp/2)), makeYear(yr+Math.round(sp/2)), { animation:{ duration:600, easingFunction:'easeInOutQuad' } });
   const fitAll  = () => {
     timelineRef.current?.fit({ animation:{ duration:700, easingFunction:'easeInOutQuad' } });
-    setFitAllActive(true);
-    setTimeout(() => setFitAllActive(false), 800);
   };
   const zoomIn  = () => timelineRef.current?.zoomIn(0.5, { animation:true });
   const zoomOut = () => timelineRef.current?.zoomOut(0.5, { animation:true });
@@ -6933,7 +6875,7 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
         <Btn small onClick={() => setOrientation('viewTree')}   style={{ fontWeight:600 }}>🌳 Tree</Btn>
         <Btn small onClick={() => setOrientation('viewRadial')} style={{ fontWeight:600 }}>☀ Radial</Btn>
         <div style={{ width:1, height:14, background:'#1f2937', margin:'0 2px' }} />
-        <Btn small onClick={fitAll} style={{ background: fitAllActive ? '#065f46' : undefined, borderColor: fitAllActive ? '#34d399' : undefined, color: fitAllActive ? '#6ee7b7' : undefined }}>Fit All</Btn>
+        <Btn small onClick={fitAll}>Fit All</Btn>
         <Btn small onClick={zoomIn}  aria-label="Zoom in" title="Zoom in" style={{ fontFamily:'monospace' }}>+</Btn>
         <Btn small onClick={zoomOut} aria-label="Zoom out" title="Zoom out" style={{ fontFamily:'monospace' }}>−</Btn>
         <Btn small onClick={onEditEras} style={{ color: eras.length > 0 ? '#a5b4fc' : '#6b7280' }}>🌈 Eras{eras.length > 0 ? ` (${eras.length})` : ''}</Btn>
@@ -7035,7 +6977,7 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
       {/* Timeline viewport with native browser scroll */}
       <div style={{ flex:1, display:'flex', minHeight:0, position:'relative' }}>
         <div ref={tlWrapRef} style={{ flex:1, minHeight:0, overflowY:'auto', overflowX:'hidden', position:'relative' }}>
-          <div style={{ position:'relative', height: contentH + 'px' }}>
+          <div style={{ position:'relative', minHeight:'100%' }}>
             <div ref={overlayRef} style={{ position:'absolute', pointerEvents:'none', zIndex:0 }} />
             <div ref={containerRef} style={{ width:'100%', position:'relative', zIndex:1 }} />
             <div ref={markersLayerRef} style={{ position:'absolute', pointerEvents:'none', zIndex:2 }} />
@@ -21271,7 +21213,7 @@ const App = () => {
   const [dependencies, setDependencies]             = useState(SAMPLE_DEPENDENCIES);
   const [hiddenStatuses, setHiddenStatuses]         = useState(() => new Set());
   const [selectedEventIds, setSelectedEventIds]     = useState(() => new Set()); // bulk-edit selection
-  const [horizStyle, setHorizStyle]                 = useState({ rowHeight:44, itemRadius:5, itemOpacity:90, fontSize:11, axisFontSize:11, labelWidth:42, showGrid:true, showLabels:true });
+  const [horizStyle, setHorizStyle]                 = useState({ rowHeight:44, itemRadius:5, itemOpacity:90, fontSize:11, axisFontSize:11, labelWidth:0, showGrid:true, showLabels:false });
   const [vertStyle,  setVertStyle]                  = useState({ cardMaxWidth:700, titleSize:13, descSize:12, avatarSize:22, spineWidth:2, dateSize:11, cardPadding:14 });
   const [genPeople, setGenPeople]                   = useState([]);
   const [genRels,   setGenRels]                     = useState([]);

@@ -6320,12 +6320,10 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
   const [rulerSpacing,setRulerSpacing]= useState(1);
   const [showHorizStyle, setShowHorizStyle] = useState(false);
   const [showReorder, setShowReorder] = useState(false);
-  const [fitAllActive, setFitAllActive] = useState(false);
-  // ── Native browser scroll state ───────────────────────────────────────────────
-  // contentH tracks actual vis-timeline content height via observers
-  const [contentH, setContentH] = useState(600);
-  const [scrollY, setScrollY] = useState(0);
-  const [viewportH, setViewportH] = useState(600);
+  // ── Simple transform-based scroll ─────────────────────────────────────────────
+  // scrollOffset controls vertical position via CSS transform translateY
+  const [scrollOffset, setScrollOffset] = useState(0);
+  const maxScrollRef = useRef(0); // Updated when timeline renders
   // ── Drag-to-reschedule state ──────────────────────────────────────────────────
   const [dragLocked, setDragLocked] = useState(false);
   const dragLockedRef = useRef(false);
@@ -6340,34 +6338,10 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
     const win = tl.getWindow();
     const winStart = win.start.getTime(), winEnd = win.end.getTime(), winDur = winEnd - winStart;
     const center = containerRef.current?.querySelector('.vis-panel.vis-center');
-    const axisPanel = containerRef.current?.querySelector('.vis-panel.vis-top');
-    const itemset = containerRef.current?.querySelector('.vis-itemset');
-    const foreground = containerRef.current?.querySelector('.vis-foreground');
     const w = center ? center.clientWidth : 0;
-    const leftPanel = containerRef.current?.querySelector('.vis-panel.vis-left');
-    const leftW = (leftPanel?.clientWidth || 0) > 0 ? leftPanel.clientWidth : 42;  // Default to 42px if panel not found or has 0 width
-    const topOffset = axisPanel ? axisPanel.offsetHeight : 0;
-
-    // Calculate full content height from itemset/foreground (not just visible panel height)
-    let fullH = itemset ? itemset.scrollHeight : 0;
-    if (foreground) {
-      fullH = Math.max(fullH, foreground.scrollHeight || 0);
-      if (foreground.children.length > 0) {
-        const sumKids = Array.from(foreground.children).reduce((sum, child) => {
-          return sum + child.getBoundingClientRect().height;
-        }, 0);
-        fullH = Math.max(fullH, sumKids);
-      }
-    }
-
+    const leftW = containerRef.current?.querySelector('.vis-panel.vis-left')?.clientWidth || 0;
     overlay.style.left = leftW + 'px';
     overlay.style.width = w + 'px';
-    overlay.style.top = topOffset + 'px';
-    overlay.style.height = fullH + 'px';
-
-    // Debug logging
-    console.log('[redrawEras] topOffset:', topOffset, 'fullH:', fullH, 'leftW:', leftW, 'w:', w);
-
     overlay.innerHTML = '';
     for (const era of erasRef.current) {
       const s = makeYear(era.yearStart).getTime();
@@ -6397,14 +6371,13 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
       const div = document.createElement('div');
       div.style.cssText = `position:absolute;top:0;left:${cx1}px;width:${cx2-cx1}px;height:100%;${bgStyle}pointer-events:none;overflow:hidden;`;
 
-      // Era label — DISABLED to avoid positioning issues
-      // Labels were appearing at wrong positions causing confusion
-      // if (cx2 - cx1 > 46) {
-      //   const lbl = document.createElement('div');
-      //   lbl.textContent = era.label;
-      //   lbl.style.cssText = `position:absolute;bottom:6px;left:7px;font-size:10px;color:${era.color||'#9ca3af'};font-weight:700;letter-spacing:.06em;text-transform:uppercase;text-shadow:0 1px 4px rgba(0,0,0,.9);pointer-events:none;white-space:nowrap;`;
-      //   div.appendChild(lbl);
-      // }
+      // Era label — shown when section is wide enough
+      if (cx2 - cx1 > 46) {
+        const lbl = document.createElement('div');
+        lbl.textContent = era.label;
+        lbl.style.cssText = `position:absolute;bottom:6px;left:7px;font-size:10px;color:${era.color||'#9ca3af'};font-weight:700;letter-spacing:.06em;text-transform:uppercase;text-shadow:0 1px 4px rgba(0,0,0,.9);pointer-events:none;white-space:nowrap;`;
+        div.appendChild(lbl);
+      }
       overlay.appendChild(div);
     }
     // Draw arc bands on top of era backgrounds (lower opacity, top-aligned strip)
@@ -6433,7 +6406,7 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
   }, []);
 
   // Re-draw arcs whenever arcs change
-  useEffect(() => { setTimeout(() => redrawEras(), 0); }, [arcs, redrawEras]);
+  useEffect(() => { redrawEras(); }, [arcs, redrawEras]);
 
   // ── Draw marker lines on top of the vis-timeline ──
   const updateMarkerLines = useCallback(() => {
@@ -6442,31 +6415,11 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
     const win = tl.getWindow();
     const winStart = win.start.getTime(), winEnd = win.end.getTime(), winDur = winEnd - winStart;
     const center = containerRef.current?.querySelector('.vis-panel.vis-center');
-    const axisPanel = containerRef.current?.querySelector('.vis-panel.vis-top');
-    const itemset = containerRef.current?.querySelector('.vis-itemset');
-    const foreground = containerRef.current?.querySelector('.vis-foreground');
     const w = center ? center.clientWidth : 0;
-    const leftPanel = containerRef.current?.querySelector('.vis-panel.vis-left');
-    const leftW = (leftPanel?.clientWidth || 0) > 0 ? leftPanel.clientWidth : 42;  // Default to 42px if panel not found or has 0 width
-    const topOffset = axisPanel ? axisPanel.offsetHeight : 0;
-
-    // Calculate full content height from itemset/foreground (not just visible panel height)
-    let fullH = itemset ? itemset.scrollHeight : 0;
-    if (foreground) {
-      fullH = Math.max(fullH, foreground.scrollHeight || 0);
-      if (foreground.children.length > 0) {
-        const sumKids = Array.from(foreground.children).reduce((sum, child) => {
-          return sum + child.getBoundingClientRect().height;
-        }, 0);
-        fullH = Math.max(fullH, sumKids);
-      }
-    }
-
-    container.style.left   = leftW + 'px';
-    container.style.width  = w + 'px';
-    container.style.top    = topOffset + 'px';
-    container.style.height = fullH + 'px';
-    container.innerHTML    = '';
+    const leftW = containerRef.current?.querySelector('.vis-panel.vis-left')?.clientWidth || 0;
+    container.style.left  = leftW + 'px';
+    container.style.width = w + 'px';
+    container.innerHTML   = '';
     if (winDur <= 0 || w <= 0) return;
     for (const m of markersRef.current) {
       if (!m.visible || m.date == null) continue;
@@ -6490,7 +6443,7 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
   }, []);
 
   // Re-draw marker lines whenever markers change
-  useEffect(() => { setTimeout(() => updateMarkerLines(), 0); }, [markers, updateMarkerLines]);
+  useEffect(() => { updateMarkerLines(); }, [markers, updateMarkerLines]);
 
   // ── Inject CSS overrides when horizStyle changes ──
   useEffect(() => {
@@ -6615,9 +6568,9 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
       selectable:true, multiselect:true, multiselectPerGroup:false,
       editable:{ add:false, remove:false, updateTime:true, updateGroup:false, overrideItems:false },
       showCurrentTime:false, stack:true, zoomKey:'ctrlKey',
-      // No horizontalScroll - let native browser scroll handle vertical
-      // Height set explicitly based on row count
-      height: 600,
+      horizontalScroll:true,
+      // Large height - we'll scroll via transform
+      height: 3000,
       tooltip:{ followMouse:true, overflowMethod:'cap' },
       snap: snapFn,
       onMove: (item, callback) => {
@@ -6691,42 +6644,28 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
     timelineRef.current = tl;
 
     // ── Native browser scroll ───────────────────────────────────────────────────
-    // Read actual content height from vis-timeline internals
-    const updateContentHeight = () => {
-      const labelSet = containerRef.current?.querySelector('.vis-labelset');
-      const centerContent = containerRef.current?.querySelector('.vis-panel.vis-center .vis-content');
-      const axisPanel = containerRef.current?.querySelector('.vis-panel.vis-top');
-      const h1 = labelSet?.scrollHeight || 0;
-      const h2 = centerContent?.scrollHeight || 0;
-      const h3 = axisPanel?.offsetHeight || 0;
-      const h = Math.max(h1, h2) + h3 + 20;
-      console.log('[Scroll Debug] updateContentHeight - before:', { h1, h2, h3, finalH: h, currentContentH: contentH });
-      setContentH(h);
-      // Check wrapper height after state update on next tick
-      setTimeout(() => {
-        const wrapperDiv = containerRef.current?.parentElement;
-        const actualWrapperHeight = wrapperDiv?.style.height;
-        console.log('[Scroll Debug] updateContentHeight - after setContentH:', { setTo: h, wrapperStyleHeight: actualWrapperHeight });
-      }, 0);
-      if (tlWrapRef.current) setViewportH(tlWrapRef.current.clientHeight);
+    // Track scroll position for the scroll indicator
+    // Simple transform-based scroll via buttons + wheel
+    const updateMaxScroll = () => {
+      const viewH = tlWrapRef.current?.clientHeight || 600;
+      const contentH = containerRef.current?.offsetHeight || 3000;
+      maxScrollRef.current = Math.max(0, contentH - viewH);
     };
 
-    // Scroll event handler for tracking position
-    const onScroll = () => {
-      if (tlWrapRef.current) setScrollY(tlWrapRef.current.scrollTop);
+    // Wheel handling: vertical scroll via transform
+    const onWheel = (e) => {
+      if (e.ctrlKey || e.metaKey) return; // Ctrl+wheel = zoom
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return; // Horizontal = pan
+      e.preventDefault();
+      e.stopPropagation();
+      updateMaxScroll();
+      setScrollOffset(prev => Math.max(0, Math.min(maxScrollRef.current, prev + e.deltaY)));
     };
-    tlWrapRef.current?.addEventListener('scroll', onScroll, { passive: true });
+    tlWrapRef.current?.addEventListener('wheel', onWheel, { capture: true, passive: false });
 
-    // ResizeObserver to track container size changes
-    const ro = new ResizeObserver(() => { tl.redraw(); updateContentHeight(); });
+    const ro = new ResizeObserver(() => { tl.redraw(); updateMaxScroll(); });
     if (containerRef.current) ro.observe(containerRef.current);
     if (tlWrapRef.current) ro.observe(tlWrapRef.current);
-
-    // MutationObserver to track vis-timeline DOM changes (row adds/removes)
-    const mo = new MutationObserver(() => { updateContentHeight(); });
-    if (containerRef.current) {
-      mo.observe(containerRef.current, { childList: true, subtree: true, attributes: true });
-    }
     tl.on('select', ({ items:sel }) => {
       // Filter out special items (background, civ, life bands)
       const realIds = sel.filter(id => !String(id).startsWith('__'));
@@ -6756,18 +6695,17 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
       setVisYearSpan(Math.round(span));
       setRulerView({ start: win.start.getFullYear(), end: win.end.getFullYear() });
     });
-    tl.on('changed', () => { setTimeout(() => { redrawEras(); updateMarkerLines(); updateContentHeight(); }, 0); });
+    tl.on('changed', () => { redrawEras(); updateMarkerLines(); updateContentHeight(); });
     return () => {
-      tlWrapRef.current?.removeEventListener('scroll', onScroll);
+      tlWrapRef.current?.removeEventListener('wheel', onWheel, { capture: true });
       ro.disconnect();
-      mo.disconnect();
       tl.destroy();
       timelineRef.current = null;
     };
   }, [redrawEras, updateMarkerLines]);
 
   // Re-draw era bands whenever eras array changes
-  useEffect(() => { setTimeout(() => redrawEras(), 0); }, [eras, redrawEras]);
+  useEffect(() => { redrawEras(); }, [eras, redrawEras]);
   useEffect(() => { timelineRef.current?.redraw(); setTimeout(() => redrawEras(), 0); }, [hs.showLabels]);
 
   useEffect(() => {
@@ -6787,31 +6725,14 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
     if (activeCivs.length > 0) {
       ds.add({ id: '__civs__', content: '🏛', title: 'Civilizations', style: 'border-left:4px solid #c084fc;', order: -1 });
     }
-    // Calculate height for vis-timeline internal rendering based on row count
-    const rowCount = people.length + (activeCivs.length > 0 ? 1 : 0);
-    const rowH = hs.rowHeight || 44;
-    const calcHeight = Math.max(rowCount * (rowH + 10) + 60, 400);
-    timelineRef.current?.setOptions({ height: calcHeight });
-    console.log('[Scroll Debug] vis-timeline height set to:', calcHeight, 'for', rowCount, 'rows');
-    // Reset scroll to top when people change, then redraw and measure actual height
-    if (tlWrapRef.current) tlWrapRef.current.scrollTop = 0;
-    setTimeout(() => {
-      timelineRef.current?.redraw();
-      redrawEras();
-      // Let updateContentHeight measure and set contentH after DOM settles
-      setTimeout(() => {
-        const labelSet = containerRef.current?.querySelector('.vis-labelset');
-        const centerContent = containerRef.current?.querySelector('.vis-panel.vis-center .vis-content');
-        const axisPanel = containerRef.current?.querySelector('.vis-panel.vis-top');
-        const h1 = labelSet?.scrollHeight || 0;
-        const h2 = centerContent?.scrollHeight || 0;
-        const h3 = axisPanel?.offsetHeight || 0;
-        const actualH = Math.max(h1, h2) + h3 + 20;
-        console.log('[Scroll Debug] After redraw - measured actual height:', actualH, '- updating contentH');
-        setContentH(actualH);
-      }, 100);
-    }, 10);
-  }, [people, dateFmt, civilizations, hs.rowHeight]);
+    // Update vis-timeline height based on people count, reset scroll, redraw
+    const newH = Math.max(people.length * 50 + 50, 400);
+    timelineRef.current?.setOptions({ height: newH });
+    setScrollOffset(0); // Reset scroll to top
+    timelineRef.current?.redraw();
+    // Defer redrawEras so it runs after redraw() has fully updated the DOM
+    setTimeout(() => redrawEras(), 0);
+  }, [people, dateFmt, civilizations]);
 
   const showImgInBar = visYearSpan < 80; // show images inside bars when zoomed in
   useEffect(() => {
@@ -6888,8 +6809,6 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
   const goTo = (yr, sp=30) => timelineRef.current?.setWindow(makeYear(yr-Math.round(sp/2)), makeYear(yr+Math.round(sp/2)), { animation:{ duration:600, easingFunction:'easeInOutQuad' } });
   const fitAll  = () => {
     timelineRef.current?.fit({ animation:{ duration:700, easingFunction:'easeInOutQuad' } });
-    setFitAllActive(true);
-    setTimeout(() => setFitAllActive(false), 800);
   };
   const zoomIn  = () => timelineRef.current?.zoomIn(0.5, { animation:true });
   const zoomOut = () => timelineRef.current?.zoomOut(0.5, { animation:true });
@@ -6902,14 +6821,11 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
     const handleKey = (e) => {
       const tag = document.activeElement?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      const wrap = tlWrapRef.current;
-      if (!wrap) return;
-      const maxScroll = wrap.scrollHeight - wrap.clientHeight;
       switch (e.key) {
-        case 'PageUp':   e.preventDefault(); wrap.scrollTop = Math.max(0, wrap.scrollTop - 200); break;
-        case 'PageDown': e.preventDefault(); wrap.scrollTop = Math.min(maxScroll, wrap.scrollTop + 200); break;
-        case 'Home':     if (!e.ctrlKey && !e.metaKey) { e.preventDefault(); wrap.scrollTop = 0; } break;
-        case 'End':      if (!e.ctrlKey && !e.metaKey) { e.preventDefault(); wrap.scrollTop = maxScroll; } break;
+        case 'PageUp':   e.preventDefault(); setScrollOffset(prev => Math.max(0, prev - 200)); break;
+        case 'PageDown': e.preventDefault(); setScrollOffset(prev => Math.min(maxScrollRef.current, prev + 200)); break;
+        case 'Home':     if (!e.ctrlKey && !e.metaKey) { e.preventDefault(); setScrollOffset(0); } break;
+        case 'End':      if (!e.ctrlKey && !e.metaKey) { e.preventDefault(); setScrollOffset(maxScrollRef.current); } break;
       }
     };
     window.addEventListener('keydown', handleKey);
@@ -6933,7 +6849,7 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
         <Btn small onClick={() => setOrientation('viewTree')}   style={{ fontWeight:600 }}>🌳 Tree</Btn>
         <Btn small onClick={() => setOrientation('viewRadial')} style={{ fontWeight:600 }}>☀ Radial</Btn>
         <div style={{ width:1, height:14, background:'#1f2937', margin:'0 2px' }} />
-        <Btn small onClick={fitAll} style={{ background: fitAllActive ? '#065f46' : undefined, borderColor: fitAllActive ? '#34d399' : undefined, color: fitAllActive ? '#6ee7b7' : undefined }}>Fit All</Btn>
+        <Btn small onClick={fitAll}>Fit All</Btn>
         <Btn small onClick={zoomIn}  aria-label="Zoom in" title="Zoom in" style={{ fontFamily:'monospace' }}>+</Btn>
         <Btn small onClick={zoomOut} aria-label="Zoom out" title="Zoom out" style={{ fontFamily:'monospace' }}>−</Btn>
         <Btn small onClick={onEditEras} style={{ color: eras.length > 0 ? '#a5b4fc' : '#6b7280' }}>🌈 Eras{eras.length > 0 ? ` (${eras.length})` : ''}</Btn>
@@ -7032,38 +6948,38 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
           if (tl) tl.moveTo(makeYear(yr));
         }}
       />
-      {/* Timeline viewport with native browser scroll */}
-      <div style={{ flex:1, display:'flex', minHeight:0, position:'relative' }}>
-        <div ref={tlWrapRef} style={{ flex:1, minHeight:0, overflowY:'auto', overflowX:'hidden', position:'relative' }}>
-          <div style={{ position:'relative', height: contentH + 'px' }}>
-            <div ref={overlayRef} style={{ position:'absolute', pointerEvents:'none', zIndex:0 }} />
-            <div ref={containerRef} style={{ width:'100%', position:'relative', zIndex:1 }} />
-            <div ref={markersLayerRef} style={{ position:'absolute', pointerEvents:'none', zIndex:2 }} />
+      {/* Timeline viewport with transform-based scroll */}
+      <div style={{ flex:1, display:'flex', minHeight:0 }}>
+        <div ref={tlWrapRef} style={{ flex:1, overflow:'hidden', position:'relative' }}>
+          <div style={{ transform: `translateY(-${scrollOffset}px)`, position:'relative' }}>
+            <div ref={overlayRef} style={{ position:'absolute', top:0, left:0, right:0, bottom:0, pointerEvents:'none', zIndex:0 }} />
+            <div ref={containerRef} style={{ width:'100%' }} />
+            <div ref={markersLayerRef} style={{ position:'absolute', top:0, left:0, right:0, bottom:0, pointerEvents:'none', zIndex:2 }} />
           </div>
         </div>
         {/* ── Scroll Control Bar ── */}
         <div style={{ width:28, background:'#0d1117', borderLeft:'1px solid #1f2937', display:'flex', flexDirection:'column', alignItems:'center', padding:'4px 0', gap:2, flexShrink:0 }}>
           <button
             className="scroll-btn"
-            onClick={() => { if (tlWrapRef.current) tlWrapRef.current.scrollTop = 0; }}
+            onClick={() => setScrollOffset(0)}
             title="Scroll to top (Home)"
             aria-label="Scroll to top"
             style={{ background:'none', border:'1px solid #374151', borderRadius:4, color:'#9ca3af', cursor:'pointer', width:22, height:22, fontSize:10, display:'flex', alignItems:'center', justifyContent:'center' }}
           >⬆</button>
           <button
             className="scroll-btn"
-            onClick={() => { if (tlWrapRef.current) tlWrapRef.current.scrollTop = Math.max(0, tlWrapRef.current.scrollTop - 200); }}
+            onClick={() => setScrollOffset(prev => Math.max(0, prev - 200))}
             title="Page up (PageUp)"
             aria-label="Page up"
             style={{ background:'none', border:'1px solid #374151', borderRadius:4, color:'#9ca3af', cursor:'pointer', width:22, height:22, fontSize:12, display:'flex', alignItems:'center', justifyContent:'center' }}
           >△</button>
           {/* Scroll position indicator */}
           <div style={{ flex:1, width:12, background:'#1f2937', borderRadius:6, position:'relative', margin:'4px 0', minHeight:40 }}>
-            {contentH > viewportH && (
+            {maxScrollRef.current > 0 && (
               <div
                 style={{
                   position:'absolute',
-                  top: `${Math.min(90, (scrollY / Math.max(1, contentH - viewportH)) * 100)}%`,
+                  top: `${Math.min(90, (scrollOffset / Math.max(1, maxScrollRef.current)) * 100)}%`,
                   left:2, right:2, height:12,
                   background:'#4b5563', borderRadius:4,
                 }}
@@ -7072,14 +6988,14 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
           </div>
           <button
             className="scroll-btn"
-            onClick={() => { if (tlWrapRef.current) tlWrapRef.current.scrollTop = Math.min(tlWrapRef.current.scrollHeight - tlWrapRef.current.clientHeight, tlWrapRef.current.scrollTop + 200); }}
+            onClick={() => setScrollOffset(prev => Math.min(maxScrollRef.current, prev + 200))}
             title="Page down (PageDown)"
             aria-label="Page down"
             style={{ background:'none', border:'1px solid #374151', borderRadius:4, color:'#9ca3af', cursor:'pointer', width:22, height:22, fontSize:12, display:'flex', alignItems:'center', justifyContent:'center' }}
           >▽</button>
           <button
             className="scroll-btn"
-            onClick={() => { if (tlWrapRef.current) tlWrapRef.current.scrollTop = tlWrapRef.current.scrollHeight; }}
+            onClick={() => setScrollOffset(maxScrollRef.current)}
             title="Scroll to bottom (End)"
             aria-label="Scroll to bottom"
             style={{ background:'none', border:'1px solid #374151', borderRadius:4, color:'#9ca3af', cursor:'pointer', width:22, height:22, fontSize:10, display:'flex', alignItems:'center', justifyContent:'center' }}
@@ -21271,7 +21187,7 @@ const App = () => {
   const [dependencies, setDependencies]             = useState(SAMPLE_DEPENDENCIES);
   const [hiddenStatuses, setHiddenStatuses]         = useState(() => new Set());
   const [selectedEventIds, setSelectedEventIds]     = useState(() => new Set()); // bulk-edit selection
-  const [horizStyle, setHorizStyle]                 = useState({ rowHeight:44, itemRadius:5, itemOpacity:90, fontSize:11, axisFontSize:11, labelWidth:42, showGrid:true, showLabels:true });
+  const [horizStyle, setHorizStyle]                 = useState({ rowHeight:44, itemRadius:5, itemOpacity:90, fontSize:11, axisFontSize:11, labelWidth:0, showGrid:true, showLabels:false });
   const [vertStyle,  setVertStyle]                  = useState({ cardMaxWidth:700, titleSize:13, descSize:12, avatarSize:22, spineWidth:2, dateSize:11, cardPadding:14 });
   const [genPeople, setGenPeople]                   = useState([]);
   const [genRels,   setGenRels]                     = useState([]);

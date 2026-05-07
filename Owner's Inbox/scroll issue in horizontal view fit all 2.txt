@@ -1,0 +1,96 @@
+**Yes, this is a common issue** with the Horizontal Timeline view (which uses **vis-timeline**) when you have many rows/groups (people) or tall items.
+
+The **"Fit All"** button adjusts the **horizontal time range** correctly, but the **vertical scroll** often doesn't go all the way to the bottom — the last few rows get partially or fully cut off.
+
+### Why This Happens
+- `timeline.fit()` mainly handles the **time window** (left/right).
+- Vertical scrolling depends on how vis-timeline calculates the total height of all groups + stacked items.
+- When groups have variable heights, many items, or when some items are very tall, the internal height calculation can be slightly off.
+- Known vis-timeline quirks (especially with `groupHeightMode`, stacking, and dynamic content) cause the scrollbar to stop short.
+
+### Best Fixes (Apply in Order)
+
+In your **HorizontalTimeline** component, improve the `fitAll` function like this:
+
+```jsx
+const fitAll = useCallback(() => {
+  if (!timelineRef.current) return;
+
+  // 1. First do a normal fit (handles time range)
+  timelineRef.current.fit({
+    animation: { duration: 600, easingFunction: 'easeInOutQuad' }
+  });
+
+  // 2. Small delay + force full vertical refresh (most effective fix)
+  setTimeout(() => {
+    if (!timelineRef.current) return;
+
+    // Force recalculation of all group heights
+    timelineRef.current.redraw();
+
+    // Optional: move the vertical scroll to top first, then let user scroll down
+    const container = timelineRef.current.dom.container;
+    if (container) {
+      container.scrollTop = 0;   // start from top
+    }
+
+    // Extra nudge: fit again after redraw
+    setTimeout(() => {
+      timelineRef.current.fit();
+    }, 50);
+  }, 100);
+}, []);
+```
+
+#### Additional Recommended Options for the Timeline
+
+When you create the vis-timeline instance, add these options for better vertical behavior:
+
+```js
+const options = {
+  // ... your existing options
+
+  verticalScroll: true,           // enable vertical scrollbar
+  horizontalScroll: true,
+  zoomKey: 'ctrlKey',             // or 'altKey' etc.
+
+  groupHeightMode: 'auto',        // or try 'fitItems' if you prefer
+  stack: true,                    // keep this true usually
+
+  // Prevent the timeline from becoming too tall
+  maxHeight: '85vh',              // or a large pixel value like '1200px'
+
+  // Margin tweaks that often help with cutoff
+  margin: {
+    item: { vertical: 8 },
+    axis: 20
+  }
+};
+```
+
+### Quick Workaround You Can Add Right Now
+
+If the above doesn't fully solve it, force a stronger redraw after fit:
+
+```jsx
+const fitAll = () => {
+  timeline.fit();
+
+  setTimeout(() => {
+    timeline.redraw();           // important
+    const cont = timeline.dom?.container;
+    if (cont) cont.scrollTop = Math.max(0, cont.scrollHeight - cont.clientHeight - 50);
+  }, 150);
+};
+```
+
+### Other Things to Check in Your Code
+
+1. Make sure the container div for the timeline has `overflow: auto` or `hidden` + flex properly set (it looks like you already have good Tailwind/flex setup).
+2. If you have very tall items (with long descriptions or big images), consider limiting item height via CSS:
+   ```css
+   .vis-item { max-height: 60px; overflow: hidden; }
+   ```
+3. After adding many people/events, call `timeline.redraw()` manually.
+
+Would you like me to give you the **exact updated `fitAll` function** tailored to how your `HorizontalTimeline` component is currently written? Just paste the relevant part of the `HorizontalTimeline` component (especially where the timeline is initialized and where `fitAll` / `registerCmds` is defined), and I'll give you the precise patch.

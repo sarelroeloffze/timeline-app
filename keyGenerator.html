@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>License Key Generator — Developer Tool</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+      background: #0a0f1e; color: #f9fafb;
+      min-height: 100vh; padding: 36px 24px;
+    }
+    .page-header { max-width: 700px; margin-bottom: 32px; }
+    .page-header h1 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+    .page-header p  { font-size: 13px; color: #6b7280; line-height: 1.6; }
+    .page-header .dev-badge {
+      display: inline-block; margin-top: 8px;
+      background: #7c2d1244; border: 1px solid #9a3412; border-radius: 5px;
+      padding: 3px 10px; font-size: 11px; font-weight: 700;
+      color: #fb923c; letter-spacing: .05em; text-transform: uppercase;
+    }
+
+    .section {
+      background: #111827; border: 1px solid #1f2937; border-radius: 12px;
+      padding: 26px 28px; margin-bottom: 22px; max-width: 700px;
+    }
+    .section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+    .section-header h2 { font-size: 14px; font-weight: 600; color: #f9fafb; }
+    .badge {
+      padding: 2px 9px; border-radius: 4px; font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .06em;
+    }
+    .badge-blue   { background: #1e3a5f; color: #60a5fa; border: 1px solid #1d4ed8; }
+    .badge-purple { background: #2e1065; color: #a78bfa; border: 1px solid #6d28d9; }
+    .badge-green  { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+    .section-desc { font-size: 12px; color: #6b7280; line-height: 1.65; margin-bottom: 20px; }
+    .section-desc strong { color: #d1d5db; }
+    .section-desc code   { color: #a5b4fc; background: #1f2937; padding: 1px 5px; border-radius: 3px; font-size: 11px; }
+
+    label { font-size: 12px; color: #6b7280; display: block; margin-bottom: 5px; margin-top: 14px; }
+    label:first-of-type { margin-top: 0; }
+    input[type="text"], input[type="email"], input[type="date"], select, textarea {
+      width: 100%; padding: 8px 12px;
+      background: #0d1117; border: 1px solid #374151; border-radius: 7px;
+      color: #f9fafb; font-size: 13px; font-family: inherit; outline: none;
+    }
+    input:focus, select:focus, textarea:focus { border-color: #6366f1; }
+    textarea { resize: vertical; font-family: 'Menlo', 'Consolas', monospace; font-size: 11px; }
+    .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+    .btn {
+      padding: 8px 20px; border-radius: 7px; border: none; cursor: pointer;
+      font-size: 13px; font-weight: 600; font-family: inherit;
+      transition: opacity .12s; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn:hover { opacity: .82; }
+    .btn-primary  { background: #6366f1; color: #fff; }
+    .btn-outline  { background: #1f2937; color: #9ca3af; border: 1px solid #374151; }
+    .btn-danger   { background: #1c0606; color: #f87171; border: 1px solid #7f1d1d; }
+    .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 18px; }
+
+    .result-block { margin-top: 18px; }
+    .result-label {
+      font-size: 11px; font-weight: 700; color: #6b7280;
+      text-transform: uppercase; letter-spacing: .06em;
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .copy-btn {
+      padding: 3px 10px; border-radius: 5px; border: 1px solid #374151;
+      background: #1f2937; color: #9ca3af; font-size: 11px; font-weight: 500;
+      cursor: pointer; font-family: inherit;
+    }
+    .copy-btn:hover { background: #374151; }
+    .mono-box {
+      background: #0d1117; border: 1px solid #374151; border-radius: 7px;
+      padding: 12px 14px; font-family: 'Menlo', 'Consolas', monospace;
+      font-size: 11px; line-height: 1.7; word-break: break-all; white-space: pre-wrap;
+    }
+    .mono-box.green  { color: #4ade80; border-color: #166534; }
+    .mono-box.purple { color: #a5b4fc; }
+    .mono-box.red    { color: #f87171; border-color: #7f1d1d; }
+    .mono-box.muted  { color: #6b7280; }
+
+    .warning-box {
+      margin-top: 14px; padding: 12px 16px;
+      background: #451a03; border: 1px solid #92400e; border-radius: 8px;
+      font-size: 12px; color: #fcd34d; line-height: 1.65;
+    }
+    .warning-box strong { color: #fde68a; }
+
+    .success-msg { color: #4ade80; font-size: 12px; }
+    .error-msg   { color: #f87171; font-size: 12px; margin-top: 8px; }
+
+    .divider { border: none; border-top: 1px solid #1f2937; margin: 20px 0; }
+
+    .verify-valid   { color: #4ade80; }
+    .verify-invalid { color: #f87171; }
+  </style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>🔑 License Key Generator</h1>
+  <p>Ed25519 asymmetric signing — developer tool for generating and verifying license keys.</p>
+  <span class="dev-badge">⚠ Developer tool only — do not distribute</span>
+</div>
+
+<!-- ─── STEP 1: Key Pair ───────────────────────────────────────────────────── -->
+<div class="section">
+  <div class="section-header">
+    <h2>Step 1 — Generate Key Pair</h2>
+    <span class="badge badge-blue">One-time setup</span>
+  </div>
+  <p class="section-desc">
+    Generate an Ed25519 key pair. <strong>Do this once per app</strong>, then save the private key
+    to a secure location (password manager, encrypted vault). The public key is embedded in
+    <code>licenseValidator.js</code> and is safe to ship with your app.
+  </p>
+
+  <div class="actions">
+    <button class="btn btn-primary" onclick="generateKeyPair()">⚙ Generate New Key Pair</button>
+    <span id="genStatus" class="success-msg" style="display:none">✓ Key pair generated</span>
+  </div>
+
+  <div id="keyResults" style="display:none">
+    <div class="result-block">
+      <div class="result-label">
+        Public Key — paste into <code style="color:#a5b4fc">PUBLIC_KEY_B64URL</code> in licenseValidator.js
+        <button class="copy-btn" onclick="copyEl('pubKeyOut', this)">Copy</button>
+      </div>
+      <div class="mono-box purple" id="pubKeyOut"></div>
+    </div>
+
+    <div class="result-block">
+      <div class="result-label">
+        Private Key (PKCS8 PEM) — keep secret, never include in your app
+        <button class="copy-btn" onclick="copyEl('privKeyOut', this)">Copy</button>
+      </div>
+      <div class="mono-box red" id="privKeyOut"></div>
+      <div class="actions" style="margin-top:10px">
+        <button class="btn btn-danger" onclick="downloadPrivateKey()">⬇ Download private.key</button>
+        <span style="font-size:12px; color:#6b7280">Save this file — it cannot be recovered</span>
+      </div>
+    </div>
+
+    <div class="warning-box">
+      ⚠ <strong>Never commit private.key to version control or include it in your app bundle.</strong>
+      Anyone with this key can generate unlimited valid licenses. Store it in an encrypted vault
+      (1Password, Bitwarden, macOS Keychain, etc.)
+    </div>
+  </div>
+</div>
+
+<!-- ─── STEP 2: Generate License ──────────────────────────────────────────── -->
+<div class="section">
+  <div class="section-header">
+    <h2>Step 2 — Generate License Key</h2>
+    <span class="badge badge-purple">Per user</span>
+  </div>
+  <p class="section-desc">
+    Fill in the user details and paste your private key. The license key is generated entirely
+    in your browser — the private key is never sent anywhere.
+  </p>
+
+  <label>Private Key (PKCS8 PEM — from Step 1 or your saved private.key file)</label>
+  <textarea id="privKeyInput" rows="6"
+    placeholder="-----BEGIN PRIVATE KEY-----&#10;MFMCAQEwBQYDK2VwBCIEIAAA...&#10;-----END PRIVATE KEY-----"></textarea>
+
+  <hr class="divider" />
+
+  <div class="row-2">
+    <div>
+      <label>User Email *</label>
+      <input type="email" id="emailInput" placeholder="user@example.com" />
+    </div>
+    <div>
+      <label>App Name</label>
+      <input type="text" id="appInput" placeholder="My App" value="Timeline App" />
+    </div>
+  </div>
+
+  <div class="row-2">
+    <div>
+      <label>License Type</label>
+      <select id="typeInput">
+        <option value="trial">Trial</option>
+        <option value="full">Full</option>
+      </select>
+    </div>
+    <div>
+      <label>Expiry Date (leave blank = never expires)</label>
+      <input type="date" id="expiryInput" />
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-primary" onclick="generateLicense()">🔑 Generate License Key</button>
+  </div>
+  <div id="licError" class="error-msg" style="display:none"></div>
+
+  <div id="licResult" style="display:none">
+    <div class="result-block">
+      <div class="result-label">
+        License Key — send this to the user
+        <button class="copy-btn" onclick="copyEl('licKeyOut', this)">Copy</button>
+      </div>
+      <div class="mono-box green" id="licKeyOut"></div>
+    </div>
+    <div class="result-block">
+      <div class="result-label">Decoded Payload</div>
+      <div class="mono-box muted" id="payloadOut"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── STEP 3: Verify ────────────────────────────────────────────────────── -->
+<div class="section">
+  <div class="section-header">
+    <h2>Step 3 — Verify a License Key</h2>
+    <span class="badge badge-green">Testing</span>
+  </div>
+  <p class="section-desc">
+    Test any license key before sending it to a user. Paste the public key from Step 1
+    (auto-filled if you generated keys above) and the license key to check.
+  </p>
+
+  <label>Public Key (base64url — auto-filled from Step 1, or paste manually)</label>
+  <input type="text" id="verifyPubKey" placeholder="base64url public key from Step 1" />
+
+  <label>License Key to Verify</label>
+  <textarea id="verifyLicKey" rows="3" placeholder="PAYLOAD.SIGNATURE"></textarea>
+
+  <div class="actions">
+    <button class="btn btn-outline" onclick="verifyLicense()">✓ Verify Key</button>
+  </div>
+
+  <div id="verifyResult" class="result-block" style="display:none">
+    <div class="mono-box" id="verifyOut"></div>
+  </div>
+</div>
+
+<script>
+// ─── Base64url / base64 helpers ───────────────────────────────────────────────
+function bytesToB64url(bytes) {
+  return btoa(String.fromCharCode(...new Uint8Array(bytes)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+function b64urlToBytes(s) {
+  const p = s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - s.length % 4) % 4);
+  return Uint8Array.from(atob(p), c => c.charCodeAt(0));
+}
+function bytesToBase64(bytes) {
+  return btoa(String.fromCharCode(...new Uint8Array(bytes)));
+}
+function base64ToBytes(b64) {
+  return Uint8Array.from(atob(b64.replace(/\s/g, '')), c => c.charCodeAt(0));
+}
+function toPem(label, bytes) {
+  const lines = bytesToBase64(bytes).match(/.{1,64}/g).join('\n');
+  return `-----BEGIN ${label}-----\n${lines}\n-----END ${label}-----`;
+}
+function fromPem(pem) {
+  return base64ToBytes(pem.replace(/-----[^-]+-----/g, '').replace(/\s/g, ''));
+}
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let _pubKeyB64url    = '';
+let _privKeyPkcs8Buf = null; // ArrayBuffer
+
+// ─── Step 1: Generate Key Pair ───────────────────────────────────────────────
+async function generateKeyPair() {
+  try {
+    const keyPair = await crypto.subtle.generateKey(
+      { name: 'Ed25519' }, true, ['sign', 'verify']
+    );
+
+    // Public key → raw 32 bytes → base64url
+    const rawPub        = await crypto.subtle.exportKey('raw', keyPair.publicKey);
+    _pubKeyB64url       = bytesToB64url(rawPub);
+
+    // Private key → PKCS8 DER
+    _privKeyPkcs8Buf    = await crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
+
+    // Display
+    document.getElementById('pubKeyOut').textContent  = _pubKeyB64url;
+    document.getElementById('privKeyOut').textContent = toPem('PRIVATE KEY', _privKeyPkcs8Buf);
+    document.getElementById('keyResults').style.display = 'block';
+    document.getElementById('genStatus').style.display  = 'inline';
+
+    // Auto-fill verify field
+    document.getElementById('verifyPubKey').value = _pubKeyB64url;
+  } catch (e) {
+    alert('Key generation failed: ' + e.message + '\n\nEd25519 requires Chrome 113+, Firefox 105+, or Safari 16.4+.');
+  }
+}
+
+function downloadPrivateKey() {
+  if (!_privKeyPkcs8Buf) return;
+  const pem  = toPem('PRIVATE KEY', _privKeyPkcs8Buf);
+  const blob = new Blob([pem], { type: 'text/plain' });
+  const url  = URL.createObjectURL(blob);
+  Object.assign(document.createElement('a'), { href: url, download: 'private.key' }).click();
+  URL.revokeObjectURL(url);
+}
+
+// ─── Step 2: Generate License Key ────────────────────────────────────────────
+async function generateLicense() {
+  const privPem = document.getElementById('privKeyInput').value.trim();
+  const email   = document.getElementById('emailInput').value.trim();
+  const app     = document.getElementById('appInput').value.trim() || 'App';
+  const type    = document.getElementById('typeInput').value;
+  const expiry  = document.getElementById('expiryInput').value || null;
+
+  const errEl   = document.getElementById('licError');
+  const resEl   = document.getElementById('licResult');
+  errEl.style.display = 'none';
+  resEl.style.display = 'none';
+
+  if (!privPem) return showErr(errEl, 'Paste your private key (PKCS8 PEM) from Step 1.');
+  if (!email)   return showErr(errEl, 'User email is required.');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showErr(errEl, 'Enter a valid email address.');
+  if (expiry) {
+    const today = new Date().toISOString().slice(0, 10);
+    if (expiry < today) return showErr(errEl, 'Expiry date is in the past — choose a future date for a valid license.');
+  }
+
+  let privateKey;
+  try {
+    const pkcs8 = fromPem(privPem);
+    privateKey  = await crypto.subtle.importKey(
+      'pkcs8', pkcs8, { name: 'Ed25519' }, false, ['sign']
+    );
+  } catch (e) {
+    return showErr(errEl, 'Invalid private key: ' + e.message);
+  }
+
+  const today   = new Date().toISOString().slice(0, 10);
+  const payload = { email, app, type, issued: today, expires: expiry };
+  const payloadB64 = bytesToB64url(new TextEncoder().encode(JSON.stringify(payload)));
+
+  let sig;
+  try {
+    sig = await crypto.subtle.sign({ name: 'Ed25519' }, privateKey, new TextEncoder().encode(payloadB64));
+  } catch (e) {
+    return showErr(errEl, 'Signing failed: ' + e.message);
+  }
+
+  const licKey = payloadB64 + '.' + bytesToB64url(sig);
+
+  document.getElementById('licKeyOut').textContent  = licKey;
+  document.getElementById('payloadOut').textContent = JSON.stringify(payload, null, 2);
+  resEl.style.display = 'block';
+}
+
+// ─── Step 3: Verify ───────────────────────────────────────────────────────────
+async function verifyLicense() {
+  const pubB64  = document.getElementById('verifyPubKey').value.trim();
+  const licKey  = document.getElementById('verifyLicKey').value.trim().replace(/\s/g, '');
+  const resultDiv = document.getElementById('verifyResult');
+  const outEl     = document.getElementById('verifyOut');
+
+  resultDiv.style.display = 'block';
+
+  const fail = (msg) => {
+    outEl.className = 'mono-box red'; outEl.textContent = '✗ ' + msg;
+  };
+  const ok = (msg) => {
+    outEl.className = 'mono-box green'; outEl.textContent = '✓ ' + msg;
+  };
+
+  if (!pubB64)  return fail('Provide the public key (base64url).');
+  if (!licKey)  return fail('Provide the license key to verify.');
+
+  const dotIdx = licKey.lastIndexOf('.');
+  if (dotIdx < 1 || dotIdx === licKey.length - 1) return fail('Invalid format — expected PAYLOAD.SIGNATURE.');
+
+  const payloadB64 = licKey.slice(0, dotIdx);
+  const sigB64     = licKey.slice(dotIdx + 1);
+
+  let publicKey;
+  try {
+    publicKey = await crypto.subtle.importKey(
+      'raw', b64urlToBytes(pubB64), { name: 'Ed25519' }, false, ['verify']
+    );
+  } catch (e) { return fail('Invalid public key: ' + e.message); }
+
+  let valid = false;
+  try {
+    valid = await crypto.subtle.verify(
+      { name: 'Ed25519' }, publicKey,
+      b64urlToBytes(sigB64),
+      new TextEncoder().encode(payloadB64)
+    );
+  } catch (e) { return fail('Verification error: ' + e.message); }
+
+  if (!valid) return fail('INVALID — signature does not match this public key.');
+
+  let payload;
+  try {
+    payload = JSON.parse(new TextDecoder().decode(b64urlToBytes(payloadB64)));
+  } catch { return fail('Signature valid but payload could not be decoded.'); }
+
+  let expiryLine = 'No expiry date set.';
+  if (payload.expires) {
+    const expDate = new Date(payload.expires + 'T00:00:00');
+    const today   = new Date(); today.setHours(0, 0, 0, 0);
+    const days    = Math.round((expDate - today) / 86_400_000);
+    expiryLine    = days < 0
+      ? `⚠ EXPIRED ${Math.abs(days)} day(s) ago (${payload.expires})`
+      : `Expires in ${days} day(s) — ${payload.expires}`;
+  }
+
+  ok(`VALID signature\n\nEmail:   ${payload.email ?? '—'}\nApp:     ${payload.app ?? '—'}\nType:    ${payload.type ?? '—'}\nIssued:  ${payload.issued ?? '—'}\n${expiryLine}`);
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function showErr(el, msg) { el.textContent = msg; el.style.display = 'block'; }
+
+function copyEl(id, btn) {
+  const text = document.getElementById(id).textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = orig, 1500);
+  });
+}
+</script>
+</body>
+</html>

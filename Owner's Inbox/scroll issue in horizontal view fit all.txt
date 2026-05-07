@@ -1,0 +1,184 @@
+That’s not a random glitch — it’s a **very typical vis-timeline + container sizing bug**. I can tell you pretty confidently what’s happening.
+
+---
+
+## 🎯 What’s actually going wrong
+
+When you click **“Fit All”**, your code likely calls something like:
+
+```js
+timeline.fit();
+```
+
+This:
+
+* recalculates the visible range ✔️
+* **but does NOT recalculate container height / scroll bounds** ❌
+
+So in your case:
+
+* The timeline expands vertically (Bible template = lots of rows)
+* But the **parent container stays “clipped”**
+* Result: **you physically can’t scroll to the bottom**
+
+---
+
+## 🔍 Why it only happens in Bible template
+
+That template probably has:
+
+* many people / groups → tall timeline
+* possibly dynamic row heights
+* maybe vertical overflow hidden somewhere
+
+So after `fit()`:
+👉 content height > container height
+👉 scroll area is wrong
+
+---
+
+## 🧨 Most likely culprit in YOUR code
+
+This line is suspicious:
+
+```html
+<body class="h-screen overflow-hidden">
+```
+
+That **kills page scrolling entirely**.
+
+So now scrolling depends on inner containers — and one of them isn’t resizing correctly after `fit()`.
+
+---
+
+## ✅ Fixes (in order of effectiveness)
+
+### ✅ 1. Force redraw after fit (MOST IMPORTANT)
+
+Right after `fit()`:
+
+```js
+timeline.fit();
+
+setTimeout(() => {
+  timeline.redraw();
+}, 0);
+```
+
+Or better:
+
+```js
+requestAnimationFrame(() => {
+  timeline.redraw();
+});
+```
+
+---
+
+### ✅ 2. Fix container overflow
+
+Find your timeline wrapper (likely something like `#root` or a div around vis timeline)
+
+Make sure:
+
+```css
+overflow: auto;
+height: 100%;
+```
+
+NOT:
+
+```css
+overflow: hidden;  ❌
+```
+
+---
+
+### ✅ 3. Allow page to scroll (quick test)
+
+Temporarily change:
+
+```html
+<body class="h-screen overflow-hidden">
+```
+
+→
+
+```html
+<body class="min-h-screen overflow-auto">
+```
+
+If scrolling suddenly works → you found the root cause.
+
+---
+
+### ✅ 4. Force height recalculation
+
+After fit:
+
+```js
+const container = timelineRef.current;
+
+if (container) {
+  container.style.height = 'auto';
+  container.offsetHeight; // force reflow
+}
+```
+
+---
+
+### ✅ 5. If using flexbox (very likely)
+
+If your layout uses flex:
+
+👉 Classic bug: child won’t shrink/scroll unless you add:
+
+```css
+min-height: 0;
+```
+
+So on the timeline container:
+
+```css
+.timeline-wrapper {
+  min-height: 0;
+  overflow: auto;
+}
+```
+
+---
+
+## 🧠 Why this happens (short version)
+
+* `vis-timeline` controls **horizontal scaling**
+* You control **vertical layout**
+* “Fit All” updates time range, not DOM layout
+* CSS + flexbox + overflow decides scrollability
+
+---
+
+## 🚀 Quick diagnostic (do this)
+
+Open dev tools and run:
+
+```js
+document.body.scrollHeight
+document.body.clientHeight
+```
+
+If `scrollHeight > clientHeight` but you still can’t scroll →
+👉 overflow is being blocked somewhere
+
+---
+
+## 💬 If you want a precise fix
+
+I can pinpoint the **exact line causing it** if you tell me:
+
+* where you call `fit()`
+* or paste your timeline container JSX / HTML
+
+Right now I’m 90% sure it’s:
+👉 `overflow-hidden` + missing redraw after fit
+
+---

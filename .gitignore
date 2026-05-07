@@ -1,5 +1,33 @@
-node_modules/
+# ── Python ─────────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+.env
+.env.local
+venv/
+.venv/
+
+# ── Electron build output ───────────────────────────────────────────────────────
 dist/
-*.log
+out/
+release/
+
+# ── Node ────────────────────────────────────────────────────────────────────────
+node_modules/
+# package-lock.json is intentionally tracked in this repo — do not add it here
+
+# ── SQLite WAL/SHM temp files (timeline.db itself is tracked intentionally) ──────
+timeline.db-shm
+timeline.db-wal
+
+# ── Uploaded user images (user data, not source code) ───────────────────────────
+images/people/
+images/events/
+images/canvas/
+
+# ── macOS ──────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+
+# ── Logs ────────────────────────────────────────────────────────────────────────
+*.log
+uvicorn.log
