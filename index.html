@@ -6414,6 +6414,7 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
           ? `.vis-panel.vis-left { display:none !important; } .vis-panel.vis-center { left:0 !important; }`
           : `.vis-label { width:${hs.labelWidth||42}px !important; min-width:${hs.labelWidth||42}px !important; }`,
       `.vis-item { border-radius:${hs.itemRadius||5}px !important; font-size:${hs.fontSize||11}px !important; opacity:${(hs.itemOpacity||90)/100} !important; }`,
+      `.vis-item.vis-background { opacity: 0.35 !important; border: none !important; box-shadow: none !important; }`,
       `.vis-time-axis .vis-text { font-size:${hs.axisFontSize||11}px !important; }`,
       hs.showGrid===false ? '.vis-grid { display:none !important; }' : '',
     ].join('\n');
@@ -6756,11 +6757,11 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
         const bg = era.bg || { type:'solid', color: era.color || '#1a1f2e', color2:'#2d3748', dir:'to right', photo:null };
         let bgStyle = '';
         if (bg.type === 'photo' && bg.photo) {
-          bgStyle = `background:url('${bg.photo}') center/cover no-repeat;`;
+          bgStyle = `background: url('${bg.photo}') center/cover no-repeat;`;
         } else if (bg.type === 'gradient') {
-          bgStyle = `background:linear-gradient(${bg.dir||'to right'},${bg.color},${bg.color2||'#2d3748'});`;
+          bgStyle = `background: linear-gradient(${bg.dir||'to right'},${bg.color},${bg.color2||'#2d3748'}); filter: brightness(3);`;
         } else {
-          bgStyle = `background:${bg.color||'#1a1f2e'};`;
+          bgStyle = `background: ${bg.color||'#1a1f2e'}; filter: brightness(3);`;
         }
         ds.add({
           id: `__era__${era.id}__${groupId}`,
@@ -6769,7 +6770,7 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
           start: eraStart,
           end: eraEnd,
           content: '',
-          style: `${bgStyle}opacity:0.15;`,
+          style: bgStyle,
           selectable: false,
           editable: false,
         });
