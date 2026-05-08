@@ -6522,8 +6522,8 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
       editable:{ add:false, remove:false, updateTime:true, updateGroup:false, overrideItems:false },
       showCurrentTime:false, stack:true, zoomKey:'ctrlKey',
       // No horizontalScroll - let native browser scroll handle vertical
-      // Height set to large value to prevent translateY offset during init
-      height: 9999,
+      // Height set explicitly based on row count
+      height: 600,
       tooltip:{ followMouse:true, overflowMethod:'cap' },
       snap: snapFn,
       onMove: (item, callback) => {
@@ -6662,7 +6662,19 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
       setVisYearSpan(Math.round(span));
       setRulerView({ start: win.start.getFullYear(), end: win.end.getFullYear() });
     });
-    tl.on('changed', () => { setTimeout(() => { updateMarkerLines(); updateContentHeight(); }, 0); });
+    tl.on('changed', () => {
+      // Reset vis-timeline's internal translateY offset
+      const vc = containerRef.current?.querySelector('.vis-panel.vis-center .vis-content');
+      const vl = containerRef.current?.querySelector('.vis-panel.vis-left .vis-content');
+      const vr = containerRef.current?.querySelector('.vis-panel.vis-right .vis-content');
+      if (vc) vc.style.transform = 'translateY(0px)';
+      if (vl) vl.style.transform = 'translateY(0px)';
+      if (vr) vr.style.transform = 'translateY(0px)';
+      setTimeout(() => {
+        updateMarkerLines();
+        updateContentHeight();
+      }, 0);
+    });
     return () => {
       tlWrapRef.current?.removeEventListener('scroll', onScroll);
       ro.disconnect();
@@ -6697,11 +6709,22 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
     setTimeout(() => {
       timelineRef.current?.redraw();
       console.log('[CONTAINER HEIGHT]', 'containerRef.offsetHeight:', containerRef.current?.offsetHeight, 'vis-timeline.offsetHeight:', containerRef.current?.querySelector('.vis-timeline')?.offsetHeight);
-      // Diagnostic: check translateY offset on vis-timeline's internal content
+      // Diagnostic: check final translateY value after setOptions + redraw
       setTimeout(() => {
         const vc = containerRef.current?.querySelector('.vis-panel.vis-center .vis-content');
-        console.log('[TRANSLATE]', 'style.transform:', vc?.style.transform, 'computed:', window.getComputedStyle(vc).transform);
-      }, 2000);
+        const transform = window.getComputedStyle(vc).transform;
+        console.log('[TRANSLATE FINAL]', transform);
+      }, 3000);
+      // Reset translateY offset on all vis-timeline panels
+      setTimeout(() => {
+        const vc = containerRef.current?.querySelector('.vis-panel.vis-center .vis-content');
+        const vl = containerRef.current?.querySelector('.vis-panel.vis-left .vis-content');
+        const vr = containerRef.current?.querySelector('.vis-panel.vis-right .vis-content');
+        if (vc) vc.style.transform = 'translateY(0px)';
+        if (vl) vl.style.transform = 'translateY(0px)';
+        if (vr) vr.style.transform = 'translateY(0px)';
+        console.log('[TRANSLATE RESET] done');
+      }, 3100);
       // Let updateContentHeight measure and set contentH after DOM settles
       setTimeout(() => {
         const labelSet = containerRef.current?.querySelector('.vis-labelset');
