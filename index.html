@@ -6609,15 +6609,7 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
       const h2 = centerContent?.scrollHeight || 0;
       const h3 = axisPanel?.offsetHeight || 0;
       const h = Math.max(h1, h2) + h3 + 20;
-      console.log('[Scroll Debug] updateContentHeight - before:', { h1, h2, h3, finalH: h, currentContentH: contentH });
-      console.log('[HEIGHT DEBUG]', 'measured:', h, 'currentContentH:', contentH);
       setContentH(h);
-      // Check wrapper height after state update on next tick
-      setTimeout(() => {
-        const wrapperDiv = containerRef.current?.parentElement;
-        const actualWrapperHeight = wrapperDiv?.style.height;
-        console.log('[Scroll Debug] updateContentHeight - after setContentH:', { setTo: h, wrapperStyleHeight: actualWrapperHeight });
-      }, 0);
       if (tlWrapRef.current) setViewportH(tlWrapRef.current.clientHeight);
     };
 
@@ -6706,7 +6698,6 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
     }
     // Set vis-timeline height using the calculated value from useMemo
     timelineRef.current?.setOptions({ height: calcHeight });
-    console.log('[Scroll Debug] vis-timeline height set to:', calcHeight);
     // Reset scroll to top when people change, then redraw and measure actual height
     if (tlWrapRef.current) tlWrapRef.current.scrollTop = 0;
     setTimeout(() => {
@@ -6727,7 +6718,6 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
         const h2 = centerContent?.scrollHeight || 0;
         const h3 = axisPanel?.offsetHeight || 0;
         const actualH = Math.max(h1, h2) + h3 + 20;
-        console.log('[Scroll Debug] After redraw - measured actual height:', actualH, '- updating contentH');
         setContentH(actualH);
       }, 100);
     }, 10);
