@@ -6415,6 +6415,8 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
           : `.vis-label { width:${hs.labelWidth||42}px !important; min-width:${hs.labelWidth||42}px !important; }`,
       `.vis-item { border-radius:${hs.itemRadius||5}px !important; font-size:${hs.fontSize||11}px !important; opacity:${(hs.itemOpacity||90)/100} !important; }`,
       `.vis-item.vis-background { opacity: 0.35 !important; border: none !important; box-shadow: none !important; }`,
+      `.vis-item.vis-line { display: none !important; }`,
+      `.vis-item.vis-dot { display: none !important; }`,
       `.vis-time-axis .vis-text { font-size:${hs.axisFontSize||11}px !important; }`,
       hs.showGrid===false ? '.vis-grid { display:none !important; }' : '',
     ].join('\n');
@@ -6709,6 +6711,13 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
     if (tlWrapRef.current) tlWrapRef.current.scrollTop = 0;
     setTimeout(() => {
       timelineRef.current?.redraw();
+      // Reset vis-timeline's internal translateY offset immediately after first redraw
+      const vc = containerRef.current?.querySelector('.vis-panel.vis-center .vis-content');
+      const vl = containerRef.current?.querySelector('.vis-panel.vis-left .vis-content');
+      const vr = containerRef.current?.querySelector('.vis-panel.vis-right .vis-content');
+      if (vc) vc.style.transform = 'translateY(0px)';
+      if (vl) vl.style.transform = 'translateY(0px)';
+      if (vr) vr.style.transform = 'translateY(0px)';
       // Let updateContentHeight measure and set contentH after DOM settles
       setTimeout(() => {
         const labelSet = containerRef.current?.querySelector('.vis-labelset');
@@ -21210,7 +21219,7 @@ const App = () => {
   const [dependencies, setDependencies]             = useState(SAMPLE_DEPENDENCIES);
   const [hiddenStatuses, setHiddenStatuses]         = useState(() => new Set());
   const [selectedEventIds, setSelectedEventIds]     = useState(() => new Set()); // bulk-edit selection
-  const [horizStyle, setHorizStyle]                 = useState({ rowHeight:44, itemRadius:5, itemOpacity:90, fontSize:11, axisFontSize:11, labelWidth:42, showGrid:true, showLabels:true });
+  const [horizStyle, setHorizStyle]                 = useState({ rowHeight:44, itemRadius:5, itemOpacity:90, fontSize:11, axisFontSize:11, labelWidth:80, showGrid:true, showLabels:true });
   const [vertStyle,  setVertStyle]                  = useState({ cardMaxWidth:700, titleSize:13, descSize:12, avatarSize:22, spineWidth:2, dateSize:11, cardPadding:14 });
   const [genPeople, setGenPeople]                   = useState([]);
   const [genRels,   setGenRels]                     = useState([]);
