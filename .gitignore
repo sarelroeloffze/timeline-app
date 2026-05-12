@@ -31,3 +31,5 @@ Thumbs.db
 # ── Logs ────────────────────────────────────────────────────────────────────────
 *.log
 uvicorn.log
+mcp-server/.env
+mcp-server/node_modules

@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="af">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timeline Dev Assistant</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Courier New', monospace;
+    background: #0d0d0d;
+    color: #e0e0e0;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ── Agtergrond teks ── */
+  .bg-label {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 11px;
+    color: #1a1a1a;
+    text-align: center;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* ── Drywende knoppie ── */
+  #fab {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: #1a1a2e;
+    border: 1px solid #3a3a6e;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    box-shadow: 0 0 20px rgba(80,80,200,0.3);
+    transition: all 0.2s ease;
+    z-index: 1000;
+  }
+  #fab:hover {
+    background: #252550;
+    box-shadow: 0 0 30px rgba(80,80,200,0.6);
+    transform: scale(1.08);
+  }
+  #fab.active {
+    background: #252550;
+    border-color: #6060cc;
+  }
+
+  /* ── Paneel ── */
+  #panel {
+    position: fixed;
+    bottom: 90px;
+    right: 28px;
+    width: 480px;
+    max-height: 78vh;
+    background: #111118;
+    border: 1px solid #2a2a4a;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.8);
+    transform: translateY(20px);
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.25s ease;
+    z-index: 999;
+  }
+  #panel.open {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  /* ── Paneel kop ── */
+  .panel-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid #1e1e3a;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .panel-header h2 {
+    font-size: 12px;
+    font-weight: normal;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #8080cc;
+  }
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #444;
+    margin-left: auto;
+    transition: background 0.3s;
+  }
+  .status-dot.connected { background: #44cc88; box-shadow: 0 0 6px #44cc88; }
+  .status-dot.thinking  { background: #ccaa44; box-shadow: 0 0 6px #ccaa44; animation: pulse 1s infinite; }
+  .status-dot.error     { background: #cc4444; box-shadow: 0 0 6px #cc4444; }
+  @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.3 } }
+
+  /* ── Vinnige aksies ── */
+  .quick-actions {
+    padding: 12px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    border-bottom: 1px solid #1e1e3a;
+    flex-shrink: 0;
+  }
+  .qa-btn {
+    padding: 5px 10px;
+    background: #1a1a2e;
+    border: 1px solid #2a2a4a;
+    border-radius: 4px;
+    color: #8080cc;
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: all 0.15s;
+  }
+  .qa-btn:hover {
+    background: #252548;
+    border-color: #5050aa;
+    color: #aaaaee;
+  }
+
+  /* ── Gesprek area ── */
+  #conversation {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+  }
+  #conversation::-webkit-scrollbar { width: 4px; }
+  #conversation::-webkit-scrollbar-track { background: transparent; }
+  #conversation::-webkit-scrollbar-thumb { background: #2a2a4a; border-radius: 2px; }
+
+  .msg {
+    font-size: 12px;
+    line-height: 1.6;
+    max-width: 100%;
+  }
+  .msg.user {
+    color: #aaaaee;
+    padding: 8px 10px;
+    background: #1a1a2e;
+    border-left: 2px solid #5050aa;
+    border-radius: 0 4px 4px 0;
+  }
+  .msg.claude {
+    color: #c8c8d8;
+    padding: 8px 10px;
+    background: #141420;
+    border-left: 2px solid #44cc88;
+    border-radius: 0 4px 4px 0;
+    white-space: pre-wrap;
+  }
+  .msg.system {
+    color: #444466;
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    text-align: center;
+  }
+  .msg code {
+    background: #0d0d1a;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    color: #88aaff;
+  }
+
+  /* ── Invoer area ── */
+  .input-area {
+    padding: 12px 16px;
+    border-top: 1px solid #1e1e3a;
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  #userInput {
+    flex: 1;
+    background: #0d0d1a;
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+    color: #e0e0e0;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    padding: 8px 10px;
+    resize: none;
+    height: 60px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  #userInput:focus { border-color: #5050aa; }
+  #userInput::placeholder { color: #333355; }
+
+  #sendBtn {
+    width: 36px;
+    background: #1a1a2e;
+    border: 1px solid #3a3a6e;
+    border-radius: 6px;
+    color: #8080cc;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #sendBtn:hover:not(:disabled) {
+    background: #252550;
+    color: #aaaaee;
+  }
+  #sendBtn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  /* ── Sigbaarheid beheer ── */
+  #apiSetup       { display: flex; flex-direction: column; gap: 10px; padding: 20px; }
+  #mainInterface  { display: none; }
+  #apiSetup.hidden    { display: none !important; }
+  #mainInterface.visible { display: flex !important; }
+
+  /* ── API Sleutel opstel ── */
+  #apiSetup {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  #apiSetup p {
+    font-size: 11px;
+    color: #666688;
+    letter-spacing: 0.5px;
+  }
+  #apiKeyInput {
+    background: #0d0d1a;
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+    color: #e0e0e0;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    padding: 8px 10px;
+    outline: none;
+  }
+  #apiKeyInput:focus { border-color: #5050aa; }
+  #saveKeyBtn {
+    padding: 8px;
+    background: #1a1a2e;
+    border: 1px solid #3a3a6e;
+    border-radius: 6px;
+    color: #8080cc;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.15s;
+  }
+  #saveKeyBtn:hover { background: #252550; color: #aaaaee; }
+
+  /* ── MCP status balk ── */
+  .mcp-bar {
+    padding: 6px 16px;
+    border-bottom: 1px solid #1e1e3a;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+  .mcp-badge {
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 3px;
+    background: #1a1a2e;
+    border: 1px solid #2a2a3a;
+    color: #444466;
+  }
+  .mcp-badge.active {
+    background: #0d1a0d;
+    border-color: #2a4a2a;
+    color: #44cc88;
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-label">TIMELINE APP · DEV ASSISTANT · PRIVATE</div>
+
+<!-- Drywende knoppie -->
+<button id="fab" title="Claude Dev Assistant">🤖</button>
+
+<!-- Paneel -->
+<div id="panel">
+
+  <!-- API Sleutel opstel (wys as geen sleutel) -->
+  <div id="apiSetup">
+    <p>ANTHROPIC API SLEUTEL</p>
+    <input id="apiKeyInput" type="password" placeholder="sk-ant-..." />
+    <button id="saveKeyBtn">STOOR SLEUTEL</button>
+  </div>
+
+  <!-- Hoofkoppelvlak -->
+  <div id="mainInterface" style="flex-direction:column; flex:1; min-height:0; overflow:hidden;">
+
+    <div class="panel-header">
+      <span>🤖</span>
+      <h2>Claude Dev Assistant</h2>
+      <div class="status-dot" id="statusDot"></div>
+    </div>
+
+    <div class="mcp-bar">
+      <span class="mcp-badge" id="badge-list">list_files</span>
+      <span class="mcp-badge" id="badge-read">read_file</span>
+      <span class="mcp-badge" id="badge-write">write_file</span>
+      <span class="mcp-badge" id="badge-search">search</span>
+      <span class="mcp-badge" id="badge-git">git_log</span>
+    </div>
+
+    <div class="quick-actions">
+      <button class="qa-btn" onclick="quickAction('list')">📁 Projekstruktuur</button>
+      <button class="qa-btn" onclick="quickAction('read-index')">📄 Lees index.html</button>
+      <button class="qa-btn" onclick="quickAction('read-server')">🐍 Lees server.py</button>
+      <button class="qa-btn" onclick="quickAction('git')">📝 Git geskiedenis</button>
+      <button class="qa-btn" onclick="quickAction('search')">🔍 Soek in kode...</button>
+      <button class="qa-btn" onclick="clearChat()">🗑 Skoon</button>
+    </div>
+
+    <div id="conversation"></div>
+
+    <div class="input-area">
+      <textarea id="userInput" placeholder="Beskryf 'n probleem of stel 'n vraag... (Shift+Enter vir nuwe reël)"></textarea>
+      <button id="sendBtn" onclick="sendMessage()">↑</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// KONFIGURASIE
+// ─────────────────────────────────────────────
+const MCP_PORT = 3131;  // MCP bediener poort
+const MODEL   = 'claude-sonnet-4-20250514';
+
+const SYSTEM_PROMPT = `Jy is 'n senior React/JavaScript en Python ontwikkelaar wat werk aan die Timeline App.
+
+APP ARGITEKTUUR:
+- index.html (~1.37MB) — die HELE frontend: alle React-komponente, styl, logika in een lêer
+- server.py (~115KB) — die hele Python/Flask backend
+- Geen boustap nie — CDN-gebaseerde React, loop direk in blaaier
+- Teiken: desktop-app (Electron/Tauri), ook blaaier-toeganklik
+
+BEKENDE SENSITIEWE AREAS:
+- Era kleurband rendering (redrawEras funksie)
+- Scroll-hoogte meting
+- vis-timeline item sigbaarheid
+- HorizontalTimeline komponent (groot, kompleks)
+
+JOU GEREEDSKAP (gebruik hulle aktief):
+- list_project_files: sien projekstruktuur
+- read_file: lees index.html of server.py volledig
+- write_file: skryf regstellings terug (git commit outomaties)
+- search_in_files: soek spesifieke funksies of variabele
+- git_log: sien commit geskiedenis
+
+REËLS:
+1. Lees die relevante kode ALTYD eers voor jy advies gee
+2. Maak een verandering op 'n slag
+3. Verduidelik presies wat jy verander het en waarom
+4. Herskryf NOOIT die hele lêer nie — maak chirurgiese wysigings
+5. As jy onseker is oor konteks, gebruik search_in_files om te soek
+6. Voor write_file: wys altyd eers die voorgestelde verandering
+7. Git commit gebeur outomaties — dit is die veiligheidsnet`;
+
+// ─────────────────────────────────────────────
+// TOESTAND
+// ─────────────────────────────────────────────
+let apiKey = localStorage.getItem('claude_dev_key') || '';
+let conversationHistory = [];
+let mcpAvailable = false;
+
+// ─────────────────────────────────────────────
+// BEGIN
+// ─────────────────────────────────────────────
+window.addEventListener('load', () => {
+  if (apiKey) {
+    showMain();
+    checkMCP();
+  } else {
+    showApiSetup();
+  }
+});
+
+document.getElementById('saveKeyBtn').addEventListener('click', () => {
+  const val = document.getElementById('apiKeyInput').value.trim();
+  if (val.startsWith('sk-ant-')) {
+    apiKey = val;
+    localStorage.setItem('claude_dev_key', val);
+    showMain();
+    checkMCP();
+  } else {
+    document.getElementById('apiKeyInput').style.borderColor = '#cc4444';
+  }
+});
+
+document.getElementById('userInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+// ─────────────────────────────────────────────
+// UI HELPERS
+// ─────────────────────────────────────────────
+function showApiSetup() {
+  document.getElementById('apiSetup').classList.remove('hidden');
+  document.getElementById('mainInterface').classList.remove('visible');
+}
+
+function showMain() {
+  document.getElementById('apiSetup').classList.add('hidden');
+  document.getElementById('mainInterface').classList.add('visible');
+  addMessage('system', 'Gereed. Gebruik vinnige aksies of beskryf \'n probleem.');
+}
+
+document.getElementById('fab').addEventListener('click', () => {
+  const panel = document.getElementById('panel');
+  const fab   = document.getElementById('fab');
+  panel.classList.toggle('open');
+  fab.classList.toggle('active');
+});
+
+function setStatus(state) {
+  const dot = document.getElementById('statusDot');
+  dot.className = 'status-dot ' + state;
+}
+
+function addMessage(role, text) {
+  const conv = document.getElementById('conversation');
+  const div  = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.textContent = text;
+  conv.appendChild(div);
+  conv.scrollTop = conv.scrollHeight;
+  return div;
+}
+
+function clearChat() {
+  document.getElementById('conversation').innerHTML = '';
+  conversationHistory = [];
+  addMessage('system', 'Gesprek gewis.');
+}
+
+function setMCPBadge(tool, active) {
+  const map = {
+    list_project_files: 'badge-list',
+    read_file: 'badge-read',
+    write_file: 'badge-write',
+    search_in_files: 'badge-search',
+    git_log: 'badge-git',
+  };
+  const el = document.getElementById(map[tool]);
+  if (el) el.classList.toggle('active', active);
+}
+
+// ─────────────────────────────────────────────
+// MCP BEDIENER KONTROLE
+// ─────────────────────────────────────────────
+async function checkMCP() {
+  try {
+    const r = await fetch(`http://localhost:${MCP_PORT}/ping`, { signal: AbortSignal.timeout(2000) });
+    mcpAvailable = r.ok;
+  } catch {
+    mcpAvailable = false;
+  }
+
+  setStatus(mcpAvailable ? 'connected' : 'error');
+
+  if (!mcpAvailable) {
+    addMessage('system', `MCP bediener nie beskikbaar nie. Begin dit met: cd mcp-server && node server.js`);
+  } else {
+    addMessage('system', 'MCP bediener gekoppel ✓ — lêertoegang aktief.');
+    ['list_project_files','read_file','write_file','search_in_files','git_log'].forEach(t => setMCPBadge(t, true));
+  }
+}
+
+// ─────────────────────────────────────────────
+// MCP GEREEDSKAPAANROEP
+// ─────────────────────────────────────────────
+async function callMCPTool(toolName, args = {}) {
+  setMCPBadge(toolName, true);
+  try {
+    const r = await fetch(`http://localhost:${MCP_PORT}/tool`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tool: toolName, args }),
+    });
+    const data = await r.json();
+    return data.result || 'Geen resultaat';
+  } catch (e) {
+    return `MCP fout: ${e.message}`;
+  } finally {
+    setTimeout(() => setMCPBadge(toolName, false), 1000);
+  }
+}
+
+// ─────────────────────────────────────────────
+// VINNIGE AKSIES
+// ─────────────────────────────────────────────
+async function quickAction(type) {
+  if (type === 'list') {
+    addMessage('user', '📁 Wys projekstruktuur');
+    setStatus('thinking');
+    const result = await callMCPTool('list_project_files');
+    addMessage('claude', result);
+    setStatus('connected');
+  }
+  else if (type === 'read-index') {
+    addMessage('user', '📄 Lees index.html (eerste 200 reëls)');
+    setStatus('thinking');
+    const result = await callMCPTool('read_file', { filename: 'index.html' });
+    // Wys net eerste 200 reëls in paneel
+    const lines = result.split('\n').slice(0, 200).join('\n');
+    addMessage('claude', lines + '\n\n[... volledige lêer beskikbaar vir Claude ...]');
+    setStatus('connected');
+  }
+  else if (type === 'read-server') {
+    addMessage('user', '🐍 Lees server.py (eerste 100 reëls)');
+    setStatus('thinking');
+    const result = await callMCPTool('read_file', { filename: 'server.py' });
+    const lines = result.split('\n').slice(0, 100).join('\n');
+    addMessage('claude', lines + '\n\n[... volledige lêer beskikbaar vir Claude ...]');
+    setStatus('connected');
+  }
+  else if (type === 'git') {
+    addMessage('user', '📝 Git geskiedenis');
+    setStatus('thinking');
+    const result = await callMCPTool('git_log', { count: 15 });
+    addMessage('claude', result);
+    setStatus('connected');
+  }
+  else if (type === 'search') {
+    const query = prompt('Soek vir:');
+    if (!query) return;
+    addMessage('user', `🔍 Soek: "${query}"`);
+    setStatus('thinking');
+    const result = await callMCPTool('search_in_files', { query });
+    addMessage('claude', result);
+    setStatus('connected');
+  }
+}
+
+// ─────────────────────────────────────────────
+// HOOFBOODSKAP — STUUR NA CLAUDE
+// ─────────────────────────────────────────────
+async function sendMessage() {
+  const input = document.getElementById('userInput');
+  const text  = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+  document.getElementById('sendBtn').disabled = true;
+  setStatus('thinking');
+
+  addMessage('user', text);
+
+  // Bou gereedskaplys vir Claude
+  const tools = [
+    {
+      name: 'list_project_files',
+      description: 'Lys alle lêers in die Timeline-projek',
+      input_schema: { type: 'object', properties: {}, required: [] },
+    },
+    {
+      name: 'read_file',
+      description: 'Lees die inhoud van enige projekslêer',
+      input_schema: {
+        type: 'object',
+        properties: { filename: { type: 'string', description: 'Lêernaam, bv. index.html' } },
+        required: ['filename'],
+      },
+    },
+    {
+      name: 'write_file',
+      description: 'Skryf gewysigde inhoud terug na \'n lêer (git commit outomaties)',
+      input_schema: {
+        type: 'object',
+        properties: {
+          filename: { type: 'string' },
+          content:  { type: 'string' },
+          message:  { type: 'string', description: 'Git commit boodskap' },
+        },
+        required: ['filename', 'content', 'message'],
+      },
+    },
+    {
+      name: 'search_in_files',
+      description: 'Soek \'n string in projekslêers',
+      input_schema: {
+        type: 'object',
+        properties: {
+          query:    { type: 'string' },
+          filename: { type: 'string', description: 'Opsioneel: spesifieke lêer' },
+        },
+        required: ['query'],
+      },
+    },
+    {
+      name: 'git_log',
+      description: 'Wys laaste git commits',
+      input_schema: {
+        type: 'object',
+        properties: { count: { type: 'number' } },
+        required: [],
+      },
+    },
+  ];
+
+  conversationHistory.push({ role: 'user', content: text });
+
+  // Stuur na Claude — agentic lus
+  try {
+    await agentLoop(tools);
+  } catch (e) {
+    addMessage('system', `Fout: ${e.message}`);
+    setStatus('error');
+  }
+
+  document.getElementById('sendBtn').disabled = false;
+  setStatus(mcpAvailable ? 'connected' : 'error');
+}
+
+// ─────────────────────────────────────────────
+// AGENTIC LUS — Claude gebruik gereedskap tot hy klaar is
+// ─────────────────────────────────────────────
+async function agentLoop(tools) {
+  let iterations = 0;
+  const MAX = 10;
+
+  while (iterations < MAX) {
+    iterations++;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'interleaved-thinking-2025-05-14',
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 8000,
+        system: SYSTEM_PROMPT,
+        tools: mcpAvailable ? tools : [],
+        messages: conversationHistory,
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error?.message || response.statusText);
+    }
+
+    const data = await response.json();
+
+    // Verwerk inhoud blokke
+    const toolUses   = [];
+    const textBlocks = [];
+
+    for (const block of data.content) {
+      if (block.type === 'text' && block.text) {
+        textBlocks.push(block.text);
+      } else if (block.type === 'tool_use') {
+        toolUses.push(block);
+      }
+    }
+
+    // Wys teks aan gebruiker
+    if (textBlocks.length > 0) {
+      addMessage('claude', textBlocks.join('\n\n'));
+    }
+
+    // As geen gereedskap gebruik — klaar
+    if (toolUses.length === 0 || data.stop_reason === 'end_turn') {
+      conversationHistory.push({ role: 'assistant', content: data.content });
+      break;
+    }
+
+    // Voeg assistent boodskap by geskiedenis
+    conversationHistory.push({ role: 'assistant', content: data.content });
+
+    // Voer gereedskap uit
+    const toolResults = [];
+    for (const toolUse of toolUses) {
+      addMessage('system', `⚙ ${toolUse.name}(${JSON.stringify(toolUse.input)})`);
+      setMCPBadge(toolUse.name, true);
+
+      let result;
+      if (mcpAvailable) {
+        result = await callMCPTool(toolUse.name, toolUse.input);
+      } else {
+        result = 'MCP bediener nie beskikbaar nie — begin server.js';
+      }
+
+      setTimeout(() => setMCPBadge(toolUse.name, false), 800);
+
+      toolResults.push({
+        type: 'tool_result',
+        tool_use_id: toolUse.id,
+        content: result,
+      });
+    }
+
+    // Voeg gereedskapsresultate by gesprek
+    conversationHistory.push({ role: 'user', content: toolResults });
+  }
+}
+</script>
+</body>
+</html>

@@ -806,6 +806,31 @@ Tags / Categories
 
 ---
 
+## Dev Assistant
+
+Local development tool for fault-finding and AI-assisted coding.
+
+**Start:**
+```bash
+cd ~/Library/CloudStorage/Dropbox/AAA\ Claud/timeline/mcp-server && node bridge.js
+```
+
+**Open:** http://localhost:3131 in Chrome
+
+**API key:** Stored in browser localStorage (only entered once)
+
+**MCP bridge:** Gives Claude read/write access to index.html, server.py, and all project files
+
+**Files:**
+- `mcp-server/bridge.js` — the HTTP bridge (port 3131)
+- `mcp-server/server.js` — MCP server for Claude Desktop
+- `mcp-server/.env` — API key + TIMELINE_PATH (not in git)
+- `dev.html` — the floating 🤖 panel UI
+
+**Do NOT distribute:** dev.html and mcp-server/ stay on local Mac only
+
+---
+
 ## Debug Session Log (May 4, 2026)
 
 **Bug:** Horizontal timeline - era backgrounds appear "on top before timeline starts" instead of behind rows; scroll doesn't reach bottom

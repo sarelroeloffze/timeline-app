@@ -1,0 +1,14 @@
+{
+  "name": "timeline-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for Timeline App dev assistant",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "dotenv": "^16.0.0"
+  }
+}
