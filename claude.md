@@ -806,6 +806,61 @@ Tags / Categories
 
 ---
 
+## Session Startup Protocol
+
+**1. Check git status first:**
+```bash
+git status
+git log --oneline -5
+```
+
+**2. Read these to understand current state:**
+- This file (`claude.md`) — Build Progress table + Next Immediate Step section
+- `Team Inbox/` — any new notes from user
+- Memory (`~/.claude/projects/.../memory/MEMORY.md`) — persistent context across sessions
+
+**3. Key files and what they contain:**
+- `index.html` (1.37 MB) — entire frontend (React, all 13 view modes, all components, all modals)
+- `server.py` (115 KB) — FastAPI backend + SQLite CRUD + Claude AI endpoints + WebSocket collaboration
+- `timeline.db` — SQLite database (WAL mode, 9 tables)
+- `mcp-server/` — Dev Assistant (bridge.js + MCP server.js + .env)
+- `dev.html` — Dev panel UI (connects to bridge on localhost:3131)
+
+---
+
+## Git Workflow
+
+**Stage + commit when:**
+- Feature complete and tested
+- User explicitly asks to commit
+- End of significant work session
+
+**Always include in commits:**
+- Modified `claude.md` (if build progress updated)
+- Modified `index.html` (if features changed)
+- Modified `server.py` (if backend changed)
+- Updated Help sections (if features added)
+
+**Never commit:**
+- `timeline.db` (gitignored — database file)
+- `mcp-server/.env` (gitignored — API key)
+- `mcp-server/node_modules/` (gitignored — npm packages)
+- User data files in `images/people/`, `images/events/`, `images/canvas/` (gitignored)
+- `.claude/settings.local.json` (local IDE settings)
+
+**Commit message format:**
+```
+Brief one-line summary
+
+- Bullet point details
+- What changed and why
+- Any breaking changes or migrations
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+```
+
+---
+
 ## Dev Assistant
 
 Local development tool for fault-finding and AI-assisted coding.
