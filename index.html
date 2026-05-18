@@ -17,6 +17,12 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 
+  <!-- Firebase SDK (v9 compat for CDN) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+
   <style>
     /* ── WCAG 2.1 AA — Accessibility utilities ─────────────────────────────────── */
     /* Screen-reader only: visually hidden but announced by assistive technology */
@@ -140,6 +146,9 @@
   #timeline-canvas-artboard.print-theme .vis-tooltip { background:#faf7f0 !important; border:1px solid #8b7355 !important; color:#3a2010 !important; }
   /* Lifespan river bands */
   #timeline-canvas-artboard.print-theme .vis-item.vis-background { border-left-width:4px !important; border-left-style:solid !important; }
+
+  /* Timeline card hover reveals delete button */
+  .timeline-card:hover .timeline-delete-btn { opacity: 1 !important; }
   </style>
 </head>
 <body class="h-screen overflow-hidden" style="background:#0a0f1e;color:#f9fafb;">
@@ -149,6 +158,522 @@
 
 <script type="text/babel">
 const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+// ─── Firebase Configuration ───────────────────────────────────────────────────
+// TODO: Replace with your actual Firebase project configuration
+// Get these values from Firebase Console → Project Settings → General → Your apps → Web app
+const firebaseConfig = {
+  apiKey: "AIzaSyCbdPG9lh2mwTjV04tNsPuj8H0O51f22ek",
+  authDomain: "timeline-app-6e2f3.firebaseapp.com",
+  projectId: "timeline-app-6e2f3",
+  storageBucket: "timeline-app-6e2f3.firebasestorage.app",
+  messagingSenderId: "73151966669",
+  appId: "1:73151966669:web:98c7f7541a3dd1fa41a884"
+};
+
+// Initialize Firebase
+let db = null, auth = null, storage = null;
+(async () => {
+  try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    auth = firebase.auth();
+    storage = firebase.storage();
+
+    // Enable offline persistence with multi-tab sync
+    // Note: clearPersistence() is NOT called here — it causes write failures
+    // Proper termination on page unload (below) prevents IDB corruption
+    try {
+      await db.enablePersistence({ synchronizeTabs: true });
+      console.log('💾 Firestore offline persistence enabled');
+    } catch (err) {
+      if (err.code === 'failed-precondition') {
+        console.warn('⚠️  Persistence failed: Multiple tabs already open');
+      } else if (err.code === 'unimplemented') {
+        console.warn('⚠️  Persistence not available in this browser');
+      } else {
+        console.error('⚠️  Persistence error:', err.code, err.message);
+        // If persistence fails due to corruption, try to recover
+        if (err.message.includes('INTERNAL ASSERTION FAILED')) {
+          console.warn('🔧 IndexedDB appears corrupted. Attempting recovery...');
+          try {
+            await db.terminate();
+            await db.clearPersistence();
+            db = firebase.firestore();
+            await db.enablePersistence({ synchronizeTabs: true });
+            console.log('✅ Persistence recovered successfully');
+          } catch (recoveryErr) {
+            console.error('❌ Recovery failed:', recoveryErr.message);
+            console.warn('⚠️  Continuing without offline persistence');
+          }
+        }
+      }
+    }
+
+    console.log('✅ Firebase initialized successfully');
+  } catch (error) {
+    console.error('❌ Firebase initialization failed:', error);
+    console.warn('⚠️  App will run in localStorage-only mode');
+  }
+})();
+
+// Properly terminate Firestore connection before page unload
+// This prevents IndexedDB corruption on next load
+window.addEventListener('beforeunload', () => {
+  if (db) {
+    db.terminate().catch(err => console.warn('Firestore terminate failed:', err));
+  }
+});
+
+// ─── Firestore Helper Functions ───────────────────────────────────────────────
+// Complete data layer for timeline CRUD operations
+
+/**
+ * Save a complete timeline to Firestore
+ * @param {string} timelineId - Unique timeline ID
+ * @param {object} timelineData - Complete timeline state object
+ * @returns {Promise<void>}
+ */
+const saveTimelineToFirestore = async (timelineId, timelineData) => {
+  if (!db || !auth?.currentUser) {
+    console.warn('Firestore not available, falling back to localStorage');
+    return saveToStorageLS(timelineData.name, timelineData);
+  }
+
+  const userId = auth.currentUser.uid;
+  const batch = db.batch();
+
+  try {
+    // 1. Save timeline metadata
+    const timelineRef = db.collection('timelines').doc(timelineId);
+    batch.set(timelineRef, {
+      userId,
+      name: timelineData.name,
+      dateFormat: timelineData.dateFormat || 'bcad',
+      bgSettings: timelineData.bgSettings || {},
+      eras: timelineData.eras || [],
+      categories: timelineData.categories || [],
+      customFieldDefs: timelineData.customFieldDefs || [],
+      markers: (timelineData.markers || []).filter(m => !m.builtIn), // exclude built-in Today marker
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    // 2. Save people (delete all existing, then write new)
+    const peopleSnapshot = await db.collection('timelines').doc(timelineId).collection('people').get();
+    peopleSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+
+    (timelineData.people || []).forEach(person => {
+      const personRef = db.collection('timelines').doc(timelineId).collection('people').doc(person.id);
+      batch.set(personRef, person);
+    });
+
+    // 3. Save events
+    const eventsSnapshot = await db.collection('timelines').doc(timelineId).collection('events').get();
+    eventsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+
+    (timelineData.events || []).forEach(event => {
+      const eventRef = db.collection('timelines').doc(timelineId).collection('events').doc(event.id);
+      batch.set(eventRef, event);
+    });
+
+    // 4. Save relationships
+    const relsSnapshot = await db.collection('timelines').doc(timelineId).collection('relationships').get();
+    relsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+
+    (timelineData.relationships || []).forEach(rel => {
+      const relRef = db.collection('timelines').doc(timelineId).collection('relationships').doc(rel.id);
+      batch.set(relRef, rel);
+    });
+
+    // 5. Save dependencies
+    const depsSnapshot = await db.collection('timelines').doc(timelineId).collection('dependencies').get();
+    depsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+
+    (timelineData.dependencies || []).forEach(dep => {
+      const depRef = db.collection('timelines').doc(timelineId).collection('dependencies').doc(dep.id);
+      batch.set(depRef, dep);
+    });
+
+    // 6. Save places
+    const placesSnapshot = await db.collection('timelines').doc(timelineId).collection('places').get();
+    placesSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+
+    (timelineData.places || []).forEach(place => {
+      const placeRef = db.collection('timelines').doc(timelineId).collection('places').doc(place.id);
+      batch.set(placeRef, place);
+    });
+
+    // 7. Save arcs
+    const arcsSnapshot = await db.collection('timelines').doc(timelineId).collection('arcs').get();
+    arcsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+
+    (timelineData.arcs || []).forEach(arc => {
+      const arcRef = db.collection('timelines').doc(timelineId).collection('arcs').doc(arc.id);
+      batch.set(arcRef, arc);
+    });
+
+    // 8. Save canvas images
+    const canvasSnapshot = await db.collection('timelines').doc(timelineId).collection('canvasImages').get();
+    canvasSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+
+    (timelineData.canvasImages || []).forEach(img => {
+      const imgRef = db.collection('timelines').doc(timelineId).collection('canvasImages').doc(img.id);
+      batch.set(imgRef, img);
+    });
+
+    await batch.commit();
+    console.log('✅ Timeline saved to Firestore:', timelineId);
+    console.log(`   📊 Saved: ${timelineData.people?.length || 0} people, ${timelineData.events?.length || 0} events`);
+  } catch (error) {
+    console.error('❌ Firestore save failed:', error);
+    console.error('   Error details:', {
+      code: error.code,
+      message: error.message,
+      timelineId,
+      peopleCount: timelineData.people?.length || 0,
+      eventsCount: timelineData.events?.length || 0
+    });
+    throw error;
+  }
+};
+
+/**
+ * Load a timeline from Firestore
+ * @param {string} timelineId - Timeline ID to load
+ * @returns {Promise<object>} Complete timeline data
+ */
+const loadTimelineFromFirestore = async (timelineId) => {
+  if (!db || !auth?.currentUser) {
+    console.warn('Firestore not available, falling back to localStorage');
+    return null;
+  }
+
+  try {
+    // 1. Load timeline metadata
+    const timelineDoc = await db.collection('timelines').doc(timelineId).get();
+    if (!timelineDoc.exists) {
+      throw new Error('Timeline not found');
+    }
+
+    const timelineData = timelineDoc.data();
+
+    // Verify ownership
+    if (timelineData.userId !== auth.currentUser.uid) {
+      throw new Error('Access denied: not timeline owner');
+    }
+
+    // 2. Load people
+    const peopleSnapshot = await db.collection('timelines').doc(timelineId).collection('people').get();
+    const people = peopleSnapshot.docs.map(doc => doc.data());
+
+    // 3. Load events
+    const eventsSnapshot = await db.collection('timelines').doc(timelineId).collection('events').get();
+    const events = eventsSnapshot.docs.map(doc => doc.data());
+
+    // 4. Load relationships
+    const relsSnapshot = await db.collection('timelines').doc(timelineId).collection('relationships').get();
+    const relationships = relsSnapshot.docs.map(doc => doc.data());
+
+    // 5. Load dependencies
+    const depsSnapshot = await db.collection('timelines').doc(timelineId).collection('dependencies').get();
+    const dependencies = depsSnapshot.docs.map(doc => doc.data());
+
+    // 6. Load places
+    const placesSnapshot = await db.collection('timelines').doc(timelineId).collection('places').get();
+    const places = placesSnapshot.docs.map(doc => doc.data());
+
+    // 7. Load arcs
+    const arcsSnapshot = await db.collection('timelines').doc(timelineId).collection('arcs').get();
+    const arcs = arcsSnapshot.docs.map(doc => doc.data());
+
+    // 8. Load canvas images
+    const canvasSnapshot = await db.collection('timelines').doc(timelineId).collection('canvasImages').get();
+    const canvasImages = canvasSnapshot.docs.map(doc => doc.data());
+
+    console.log('✅ Timeline loaded from Firestore:', timelineId);
+
+    return {
+      id: timelineId,
+      name: timelineData.name,
+      people,
+      events,
+      relationships: relationships || [],
+      dependencies: dependencies || [],
+      places: places || [],
+      arcs: arcs || [],
+      canvasImages: canvasImages || [],
+      dateFormat: timelineData.dateFormat || 'bcad',
+      bgSettings: timelineData.bgSettings || {},
+      eras: timelineData.eras || [],
+      categories: timelineData.categories || [],
+      customFieldDefs: timelineData.customFieldDefs || [],
+      markers: timelineData.markers || []
+    };
+  } catch (error) {
+    console.error('❌ Firestore load failed:', error);
+    throw error;
+  }
+};
+
+/**
+ * Subscribe to real-time timeline updates
+ * @param {string} timelineId - Timeline ID to watch
+ * @param {function} onUpdate - Callback called with updated timeline data
+ * @returns {function} Unsubscribe function
+ */
+const subscribeToTimeline = (timelineId, onUpdate) => {
+  if (!db || !auth?.currentUser) {
+    console.warn('Firestore not available for real-time sync');
+    return () => {}; // no-op unsubscribe
+  }
+
+  const unsubscribers = [];
+  const currentData = {
+    people: [],
+    events: [],
+    relationships: [],
+    dependencies: [],
+    places: [],
+    arcs: [],
+    canvasImages: [],
+    metadata: {}
+  };
+
+  // Helper to trigger update callback with current aggregated data
+  const notifyUpdate = () => {
+    const timeline = {
+      id: timelineId,
+      name: currentData.metadata.name || '',
+      people: currentData.people,
+      events: currentData.events,
+      relationships: currentData.relationships,
+      dependencies: currentData.dependencies,
+      places: currentData.places,
+      arcs: currentData.arcs,
+      canvasImages: currentData.canvasImages,
+      dateFormat: currentData.metadata.dateFormat || 'bcad',
+      bgSettings: currentData.metadata.bgSettings || {},
+      eras: currentData.metadata.eras || [],
+      categories: currentData.metadata.categories || [],
+      customFieldDefs: currentData.metadata.customFieldDefs || [],
+      markers: currentData.metadata.markers || []
+    };
+    onUpdate(timeline);
+  };
+
+  try {
+    // 1. Subscribe to timeline metadata
+    const metaUnsub = db.collection('timelines').doc(timelineId)
+      .onSnapshot(doc => {
+        if (doc.exists) {
+          currentData.metadata = doc.data();
+          notifyUpdate();
+        }
+      }, err => console.error('Metadata sync error:', err));
+    unsubscribers.push(metaUnsub);
+
+    // 2. Subscribe to people
+    const peopleUnsub = db.collection('timelines').doc(timelineId).collection('people')
+      .onSnapshot(snapshot => {
+        currentData.people = snapshot.docs.map(doc => doc.data());
+        notifyUpdate();
+      }, err => console.error('People sync error:', err));
+    unsubscribers.push(peopleUnsub);
+
+    // 3. Subscribe to events
+    const eventsUnsub = db.collection('timelines').doc(timelineId).collection('events')
+      .onSnapshot(snapshot => {
+        currentData.events = snapshot.docs.map(doc => doc.data());
+        notifyUpdate();
+      }, err => console.error('Events sync error:', err));
+    unsubscribers.push(eventsUnsub);
+
+    // 4. Subscribe to relationships
+    const relsUnsub = db.collection('timelines').doc(timelineId).collection('relationships')
+      .onSnapshot(snapshot => {
+        currentData.relationships = snapshot.docs.map(doc => doc.data());
+        notifyUpdate();
+      }, err => console.error('Relationships sync error:', err));
+    unsubscribers.push(relsUnsub);
+
+    // 5. Subscribe to dependencies
+    const depsUnsub = db.collection('timelines').doc(timelineId).collection('dependencies')
+      .onSnapshot(snapshot => {
+        currentData.dependencies = snapshot.docs.map(doc => doc.data());
+        notifyUpdate();
+      }, err => console.error('Dependencies sync error:', err));
+    unsubscribers.push(depsUnsub);
+
+    // 6. Subscribe to places
+    const placesUnsub = db.collection('timelines').doc(timelineId).collection('places')
+      .onSnapshot(snapshot => {
+        currentData.places = snapshot.docs.map(doc => doc.data());
+        notifyUpdate();
+      }, err => console.error('Places sync error:', err));
+    unsubscribers.push(placesUnsub);
+
+    // 7. Subscribe to arcs
+    const arcsUnsub = db.collection('timelines').doc(timelineId).collection('arcs')
+      .onSnapshot(snapshot => {
+        currentData.arcs = snapshot.docs.map(doc => doc.data());
+        notifyUpdate();
+      }, err => console.error('Arcs sync error:', err));
+    unsubscribers.push(arcsUnsub);
+
+    // 8. Subscribe to canvas images
+    const canvasUnsub = db.collection('timelines').doc(timelineId).collection('canvasImages')
+      .onSnapshot(snapshot => {
+        currentData.canvasImages = snapshot.docs.map(doc => doc.data());
+        notifyUpdate();
+      }, err => console.error('Canvas images sync error:', err));
+    unsubscribers.push(canvasUnsub);
+
+    console.log('✅ Real-time sync enabled for timeline:', timelineId);
+
+    // Return combined unsubscribe function
+    return () => {
+      unsubscribers.forEach(unsub => unsub());
+      console.log('🔌 Real-time sync disabled for timeline:', timelineId);
+    };
+  } catch (error) {
+    console.error('❌ Failed to set up real-time sync:', error);
+    return () => {};
+  }
+};
+
+/**
+ * List all timelines for current user
+ * @returns {Promise<Array>} Array of timeline metadata
+ */
+const listUserTimelines = async () => {
+  if (!db || !auth?.currentUser) {
+    console.warn('Firestore not available');
+    return [];
+  }
+
+  try {
+    const snapshot = await db.collection('timelines')
+      .where('userId', '==', auth.currentUser.uid)
+      .get();
+
+    // Sort in memory instead of using orderBy (avoids index requirement)
+    const timelines = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    timelines.sort((a, b) => {
+      const aTime = a.updatedAt?.toMillis?.() || 0;
+      const bTime = b.updatedAt?.toMillis?.() || 0;
+      return bTime - aTime; // newest first
+    });
+
+    console.log('✅ Loaded timelines from Firestore:', timelines.length);
+    return timelines;
+  } catch (error) {
+    console.error('❌ Failed to list timelines:', error);
+    console.error('Full error:', error);
+    return [];
+  }
+};
+
+/**
+ * Delete a timeline from Firestore
+ * @param {string} timelineId - Timeline ID to delete
+ */
+const deleteTimelineFromFirestore = async (timelineId) => {
+  if (!db || !auth?.currentUser) return;
+
+  try {
+    const batch = db.batch();
+
+    // Delete all subcollections
+    const collections = ['people', 'events', 'relationships', 'dependencies', 'places', 'arcs', 'canvasImages'];
+    for (const collName of collections) {
+      const snapshot = await db.collection('timelines').doc(timelineId).collection(collName).get();
+      snapshot.docs.forEach(doc => batch.delete(doc.ref));
+    }
+
+    // Delete timeline document
+    batch.delete(db.collection('timelines').doc(timelineId));
+
+    await batch.commit();
+    console.log('✅ Timeline deleted from Firestore:', timelineId);
+  } catch (error) {
+    console.error('❌ Firestore delete failed:', error);
+    throw error;
+  }
+};
+
+/**
+ * Upload image to Firebase Storage
+ * @param {Blob|File} file - Image file
+ * @param {string} category - 'people', 'events', or 'canvas'
+ * @param {string} filename - Unique filename
+ * @returns {Promise<string>} Download URL
+ */
+const uploadImageToStorage = async (file, category, filename) => {
+  if (!storage || !auth?.currentUser) {
+    console.warn('Firebase Storage not available, using base64');
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  try {
+    const path = `timelines/${auth.currentUser.uid}/${category}/${filename}`;
+    const storageRef = storage.ref(path);
+    const snapshot = await storageRef.put(file);
+    const downloadURL = await snapshot.ref.getDownloadURL();
+    console.log('✅ Image uploaded to Storage:', downloadURL);
+    return downloadURL;
+  } catch (error) {
+    console.error('❌ Storage upload failed:', error);
+    throw error;
+  }
+};
+
+/**
+ * Complete image upload flow: resize + upload to Storage + return URL
+ * @param {File} file - Original image file
+ * @param {string} category - 'people', 'events', or 'canvas'
+ * @param {number} maxW - Max width
+ * @param {number} maxH - Max height
+ * @returns {Promise<string>} Download URL or base64 data URL
+ */
+const uploadResizedImage = async (file, category, maxW, maxH) => {
+  // Helper: convert data URL to Blob
+  const dataURLtoBlob = (dataURL) => {
+    const arr = dataURL.split(',');
+    const mime = arr[0].match(/:(.*?);/)[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) u8arr[n] = bstr.charCodeAt(n);
+    return new Blob([u8arr], { type: mime });
+  };
+
+  try {
+    // First resize the image (returns data URL)
+    const dataURL = await resizeImage(file, maxW, maxH);
+
+    // If Firebase Storage is available, upload it
+    if (storage && auth?.currentUser) {
+      const blob = dataURLtoBlob(dataURL);
+      const filename = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}.jpg`;
+      return await uploadImageToStorage(blob, category, filename);
+    }
+
+    // Otherwise return the data URL (base64)
+    return dataURL;
+  } catch (error) {
+    console.error('Image upload failed:', error);
+    throw error;
+  }
+};
 
 // ─── Date Helpers ─────────────────────────────────────────────────────────────
 const makeYear = (year, month = 6, day = 1) => {
@@ -289,7 +814,7 @@ const TRANSLATIONS = {
     // File menu
     'New Timeline…':'New Timeline…','Open / Load…':'Open / Load…',
     'Open Recent…':'Open Recent…',
-    'Save':'Save','Export JSON…':'Export JSON…','Import CSV…':'Import CSV…',
+    'Save':'Save','Save As…':'Save As…','Export JSON…':'Export JSON…','Import CSV…':'Import CSV…',
     'Export CSV…':'Export CSV…','Print…':'Print…',
     'Import GEDCOM (.ged)…':'Import GEDCOM (.ged)…','Export GEDCOM (.ged)…':'Export GEDCOM (.ged)…',
     // Edit menu
@@ -592,7 +1117,7 @@ const TRANSLATIONS = {
     // File menu
     'New Timeline…':'Nuwe Tydlyn…','Open / Load…':'Maak Oop / Laai…',
     'Open Recent…':'Maak Onlangse Oop…',
-    'Save':'Stoor','Export JSON…':'Voer JSON Uit…','Import CSV…':'Voer CSV In…',
+    'Save':'Stoor','Save As…':'Stoor As…','Export JSON…':'Voer JSON Uit…','Import CSV…':'Voer CSV In…',
     'Export CSV…':'Voer CSV Uit…','Print…':'Druk…',
     'Import GEDCOM (.ged)…':'Voer GEDCOM (.ged) In…','Export GEDCOM (.ged)…':'Voer GEDCOM (.ged) Uit…',
     // Edit menu
@@ -894,7 +1419,7 @@ const TRANSLATIONS = {
     // File menu
     'New Timeline…':'Nueva Línea de Tiempo…','Open / Load…':'Abrir / Cargar…',
     'Open Recent…':'Abrir Reciente…',
-    'Save':'Guardar','Export JSON…':'Exportar JSON…','Import CSV…':'Importar CSV…',
+    'Save':'Guardar','Save As…':'Guardar Como…','Export JSON…':'Exportar JSON…','Import CSV…':'Importar CSV…',
     'Export CSV…':'Exportar CSV…','Print…':'Imprimir…',
     'Import GEDCOM (.ged)…':'Importar GEDCOM (.ged)…','Export GEDCOM (.ged)…':'Exportar GEDCOM (.ged)…',
     // Edit menu
@@ -1196,7 +1721,7 @@ const TRANSLATIONS = {
     // File menu
     'New Timeline…':'Nouvelle Chronologie…','Open / Load…':'Ouvrir / Charger…',
     'Open Recent…':'Ouvrir Récent…',
-    'Save':'Enregistrer','Export JSON…':'Exporter JSON…','Import CSV…':'Importer CSV…',
+    'Save':'Enregistrer','Save As…':'Enregistrer Sous…','Export JSON…':'Exporter JSON…','Import CSV…':'Importer CSV…',
     'Export CSV…':'Exporter CSV…','Print…':'Imprimer…',
     'Import GEDCOM (.ged)…':'Importer GEDCOM (.ged)…','Export GEDCOM (.ged)…':'Exporter GEDCOM (.ged)…',
     // Edit menu
@@ -1842,22 +2367,48 @@ const apiResolveShareLink = async (token, password = '') => {
 
 // High-level: save timeline (uses API if connected, else localStorage)
 const saveToStorage = async (name, people, events, eras = [], bgSettings = null, canvasImages = [], hiddenEvents = [], relationships = [], civilizations = [], genPeople = [], genRels = [], customFieldDefs = [], categories = [], dependencies = [], places = [], arcs = [], markers = []) => {
-  if (_serverMode) {
-    const payload = { name, people, events, eras, bgSettings, canvasImages, hiddenEvents, relationships, civilizations, genPeople, genRels, customFieldDefs, categories, dependencies, places, arcs, markers };
-    await apiSaveTimeline(name, payload);
+  // Use Firestore if available, otherwise fall back to localStorage
+  if (db && auth?.currentUser) {
+    // Get or create timeline ID
+    let timelineId = _timelineIdMap[name];
+    if (!timelineId) {
+      // Generate new ID for new timeline
+      timelineId = 'tl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+      _timelineIdMap[name] = timelineId;
+      _saveIdMap();
+    }
+
+    const payload = {
+      name,
+      people,
+      events,
+      eras,
+      bgSettings,
+      canvasImages,
+      relationships,
+      customFieldDefs,
+      categories,
+      dependencies,
+      places,
+      arcs,
+      markers,
+      dateFormat: 'bcad' // will be overridden by App state
+    };
+
+    await saveTimelineToFirestore(timelineId, payload);
   } else {
+    // Fallback to localStorage
     saveToStorageLS(name, people, events, eras, bgSettings, canvasImages, hiddenEvents, relationships, civilizations, genPeople, genRels, customFieldDefs, categories, dependencies, places, arcs, markers);
-    // localStorage version snapshot (max 10, auto only)
     _lsPushVersionSnapshot(name, { name, people, events, eras, bgSettings, canvasImages, hiddenEvents, relationships, civilizations, genPeople, genRels, customFieldDefs, categories, dependencies, places, arcs, markers });
   }
 };
 
 // High-level: delete timeline
 const deleteFromStorage = async (name) => {
-  if (_serverMode) {
-    const id = _timelineIdMap[name];
-    if (id) {
-      await apiDeleteTimeline(id);
+  if (db && auth?.currentUser) {
+    const timelineId = _timelineIdMap[name];
+    if (timelineId) {
+      await deleteTimelineFromFirestore(timelineId);
       delete _timelineIdMap[name];
       _saveIdMap();
     }
@@ -2127,6 +2678,40 @@ const _showCollabToast = (msg) => {
   _collabToastEl.style.opacity = '1';
   clearTimeout(_collabToastTimer);
   _collabToastTimer = setTimeout(() => { if (_collabToastEl) _collabToastEl.style.opacity = '0'; }, 4000);
+};
+
+/**
+ * useOnlineStatus — tracks both browser and Firebase connectivity
+ * Returns { online, firestoreConnected }
+ */
+const useOnlineStatus = () => {
+  const [online, setOnline] = React.useState(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [firestoreConnected, setFirestoreConnected] = React.useState(true);
+
+  React.useEffect(() => {
+    // Monitor browser online/offline status
+    const handleOnline = () => setOnline(true);
+    const handleOffline = () => setOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Monitor Firebase auth state (if user is signed in, we consider Firestore connected)
+    let unsubscribe = () => {};
+    if (auth) {
+      unsubscribe = auth.onAuthStateChanged((user) => {
+        setFirestoreConnected(!!user);
+      });
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      unsubscribe();
+    };
+  }, []);
+
+  return { online, firestoreConnected };
 };
 
 /**
@@ -3931,13 +4516,13 @@ const Avatar = ({ person, size = 32, dim = false, onUpload = null }) => {
   const handleFile = async e => {
     const f = e.target.files[0]; if (!f || !onUpload) return;
     try {
-      const dataUrl = await resizeImage(f, 300, 300);
-      let finalUrl = dataUrl;
-      if (_serverMode) {
-        try { finalUrl = await apiUploadImage(dataUrl, 'people'); } catch { /* fallback to base64 */ }
-      }
-      onUpload(person.id, finalUrl);
-    } catch { alert('Could not load image.'); }
+      // Upload to Firebase Storage (or fall back to base64)
+      const url = await uploadResizedImage(f, 'people', 300, 300);
+      onUpload(person.id, url);
+    } catch (err) {
+      console.error('Photo upload failed:', err);
+      alert('Could not upload image.');
+    }
     e.target.value = '';
   };
   return (
@@ -3970,6 +4555,323 @@ const Btn = ({ onClick, children, primary, danger, small, style = {}, ...rest })
     {children}
   </button>
 );
+
+// ─── LoginScreen Component ────────────────────────────────────────────────────
+const LoginScreen = ({ onLogin }) => {
+  const [mode, setMode] = useState('login'); // 'login' or 'signup'
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleEmailAuth = async (e) => {
+    e.preventDefault();
+    if (!auth) {
+      setError('Firebase not initialized. Please check configuration.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      if (mode === 'signup') {
+        // Create new account
+        const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+        // Set display name if provided
+        if (displayName && userCredential.user) {
+          await userCredential.user.updateProfile({ displayName });
+        }
+      } else {
+        // Sign in
+        await auth.signInWithEmailAndPassword(email, password);
+      }
+      // onLogin will be called automatically by the auth state listener
+    } catch (err) {
+      console.error('Auth error:', err);
+      setError(err.message || 'Authentication failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    if (!auth) {
+      setError('Firebase not initialized. Please check configuration.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      await auth.signInWithPopup(provider);
+      // onLogin will be called automatically by the auth state listener
+    } catch (err) {
+      console.error('Google sign-in error:', err);
+      setError(err.message || 'Google sign-in failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '20px'
+    }}>
+      <div style={{
+        background: '#1f2937',
+        borderRadius: '16px',
+        padding: '40px',
+        width: '100%',
+        maxWidth: '420px',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.5)'
+      }}>
+        {/* Logo/Title */}
+        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+          <h1 style={{
+            fontSize: '28px',
+            fontWeight: '700',
+            color: '#f9fafb',
+            marginBottom: '8px'
+          }}>
+            Timeline App
+          </h1>
+          <p style={{ color: '#9ca3af', fontSize: '14px' }}>
+            {mode === 'login' ? 'Sign in to continue' : 'Create your account'}
+          </p>
+        </div>
+
+        {/* Error message */}
+        {error && (
+          <div style={{
+            background: '#7f1d1d',
+            border: '1px solid #991b1b',
+            borderRadius: '8px',
+            padding: '12px',
+            marginBottom: '20px',
+            color: '#fecaca',
+            fontSize: '13px'
+          }}>
+            {error}
+          </div>
+        )}
+
+        {/* Email/Password Form */}
+        <form onSubmit={handleEmailAuth}>
+          {mode === 'signup' && (
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                color: '#d1d5db',
+                fontSize: '13px',
+                fontWeight: '500',
+                marginBottom: '6px'
+              }}>
+                Display Name (optional)
+              </label>
+              <input
+                type="text"
+                value={displayName}
+                onChange={e => setDisplayName(e.target.value)}
+                placeholder="Your name"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: '#111827',
+                  border: '1px solid #374151',
+                  borderRadius: '8px',
+                  color: '#f9fafb',
+                  fontSize: '14px',
+                  outline: 'none'
+                }}
+                onFocus={e => e.target.style.borderColor = '#6366f1'}
+                onBlur={e => e.target.style.borderColor = '#374151'}
+              />
+            </div>
+          )}
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{
+              display: 'block',
+              color: '#d1d5db',
+              fontSize: '13px',
+              fontWeight: '500',
+              marginBottom: '6px'
+            }}>
+              Email
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                background: '#111827',
+                border: '1px solid #374151',
+                borderRadius: '8px',
+                color: '#f9fafb',
+                fontSize: '14px',
+                outline: 'none'
+              }}
+              onFocus={e => e.target.style.borderColor = '#6366f1'}
+              onBlur={e => e.target.style.borderColor = '#374151'}
+            />
+          </div>
+
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{
+              display: 'block',
+              color: '#d1d5db',
+              fontSize: '13px',
+              fontWeight: '500',
+              marginBottom: '6px'
+            }}>
+              Password
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+              minLength={6}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                background: '#111827',
+                border: '1px solid #374151',
+                borderRadius: '8px',
+                color: '#f9fafb',
+                fontSize: '14px',
+                outline: 'none'
+              }}
+              onFocus={e => e.target.style.borderColor = '#6366f1'}
+              onBlur={e => e.target.style.borderColor = '#374151'}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              width: '100%',
+              padding: '12px',
+              background: loading ? '#4b5563' : '#6366f1',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              marginBottom: '16px',
+              transition: 'background 0.2s'
+            }}
+            onMouseEnter={e => !loading && (e.target.style.background = '#4f46e5')}
+            onMouseLeave={e => !loading && (e.target.style.background = '#6366f1')}
+          >
+            {loading ? 'Please wait...' : (mode === 'login' ? 'Sign In' : 'Create Account')}
+          </button>
+        </form>
+
+        {/* Divider */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          margin: '24px 0',
+          color: '#6b7280',
+          fontSize: '13px'
+        }}>
+          <div style={{ flex: 1, height: '1px', background: '#374151' }}></div>
+          <span style={{ padding: '0 12px' }}>or</span>
+          <div style={{ flex: 1, height: '1px', background: '#374151' }}></div>
+        </div>
+
+        {/* Google Sign-In Button */}
+        <button
+          onClick={handleGoogleSignIn}
+          disabled={loading}
+          style={{
+            width: '100%',
+            padding: '12px',
+            background: '#fff',
+            color: '#1f2937',
+            border: '1px solid #d1d5db',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: '600',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            marginBottom: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            transition: 'background 0.2s'
+          }}
+          onMouseEnter={e => !loading && (e.target.style.background = '#f3f4f6')}
+          onMouseLeave={e => !loading && (e.target.style.background = '#fff')}
+        >
+          <svg width="18" height="18" viewBox="0 0 18 18">
+            <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
+            <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/>
+            <path fill="#FBBC05" d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707 0-.593.102-1.17.282-1.709V4.958H.957C.347 6.173 0 7.548 0 9c0 1.452.348 2.827.957 4.042l3.007-2.335z"/>
+            <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>
+          </svg>
+          Sign in with Google
+        </button>
+
+        {/* Toggle between login/signup */}
+        <div style={{ textAlign: 'center', fontSize: '13px', color: '#9ca3af' }}>
+          {mode === 'login' ? (
+            <>
+              Don't have an account?{' '}
+              <button
+                onClick={() => setMode('signup')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#6366f1',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  textDecoration: 'underline'
+                }}
+              >
+                Sign up
+              </button>
+            </>
+          ) : (
+            <>
+              Already have an account?{' '}
+              <button
+                onClick={() => setMode('login')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#6366f1',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  textDecoration: 'underline'
+                }}
+              >
+                Sign in
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // ─── Modal wrapper ─────────────────────────────────────────────────────────────
 const Modal = ({ title, onClose, children, width = 440 }) => {
@@ -4535,6 +5437,52 @@ const TemplateGalleryModal = ({ onUseTemplate, onClose }) => {
 };
 
 // ─── New / Open Timeline modals ───────────────────────────────────────────────
+const SaveAsModal = ({ currentName, onConfirm, onClose }) => {
+  const t = useT();
+  const [name, setName] = useState(currentName || '');
+  const confirm = () => {
+    const newName = name.trim();
+    if (newName && newName !== currentName) {
+      onConfirm(newName);
+    } else if (newName === currentName) {
+      alert('Please enter a different name');
+    }
+  };
+  return (
+    <Modal title={t('Save As…')} onClose={onClose} width={420}>
+      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+        <div>
+          <label htmlFor="saveas-timeline-name" style={{ fontSize:12, color:'#9ca3af', display:'block', marginBottom:5 }}>
+            New timeline name
+          </label>
+          <input
+            id="saveas-timeline-name"
+            autoFocus
+            type="text"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && confirm()}
+            placeholder="Enter new name"
+            aria-required="true"
+            style={{
+              width:'100%', background:'#1f2937', border:'1px solid #374151',
+              borderRadius:8, padding:'8px 12px', fontSize:13, color:'#f9fafb',
+              outline:'none', boxSizing:'border-box'
+            }}
+          />
+        </div>
+        <div style={{ fontSize:12, color:'#6b7280' }}>
+          This will create a copy with the new name. The original "{currentName}" will remain unchanged.
+        </div>
+        <div style={{ display:'flex', gap:8 }}>
+          <Btn onClick={onClose}>{t('Cancel')}</Btn>
+          <Btn primary onClick={confirm} style={{ flex:1 }}>Save As</Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
 const NewTimelineModal = ({ onConfirm, onClose, onBrowseTemplates }) => {
   const t = useT();
   const [name, setName] = useState(''), [withSample, setWithSample] = useState(true);
@@ -4576,56 +5524,59 @@ const OpenTimelineModal = ({ onLoad, onClose }) => {
   const [loading, setLoading] = useState(true);
   const fileRef = useRef(null);
 
-  // Load timeline list from API or localStorage
+  // Load timeline list from Firestore or localStorage
   useEffect(() => {
     const loadList = async () => {
       setLoading(true);
       try {
-        if (_serverMode) {
-          const list = await apiListTimelines();
-          // Normalise to same shape as localStorage saves
-          setSaves(list.map(t => ({
-            id: t.id, name: t.name, savedAt: t.savedAt,
-            people: { length: t.peopleCount || 0 },
-            events: { length: t.eventsCount || 0 },
-            _apiMode: true,
+        if (db && auth?.currentUser) {
+          // Load from Firestore
+          const firestoreTimelines = await listUserTimelines();
+          setSaves(firestoreTimelines.map(t => ({
+            id: t.id,
+            name: t.name,
+            savedAt: t.updatedAt?.toDate?.() || new Date(),
+            people: { length: 0 }, // Don't load full data for list view
+            events: { length: 0 },
+            _firestoreMode: true,
           })));
         } else {
+          // Fallback to localStorage
           setSaves(loadSaves());
         }
-      } catch {
+      } catch (err) {
+        console.warn('Failed to load timeline list:', err);
         setSaves(loadSaves()); // fallback
       }
       setLoading(false);
     };
-    // Re-run after server detection if still pending
-    if (_serverMode === null) {
-      const unsub = onServerModeChange(() => loadList());
-      loadList();
-      return unsub; // cleanup not strictly needed but tidy
-    } else {
-      loadList();
-    }
+    loadList();
   }, []);
 
   const handleDelete = async (s, e) => {
     e.stopPropagation();
+    const confirmed = window.confirm(`Delete timeline "${s.name}"?\n\nThis action cannot be undone.`);
+    if (!confirmed) return;
     try { await deleteFromStorage(s.name); } catch {}
     setSaves(prev => prev.filter(x => x.name !== s.name));
   };
 
   const handleOpen = async (s) => {
-    if (s._apiMode && s.id) {
+    if (s._firestoreMode && s.id) {
       try {
-        const full = await apiLoadTimeline(s.id);
+        const full = await loadTimelineFromFirestore(s.id);
         // Store the id mapping for future saves
         _timelineIdMap[full.name] = full.id;
         _saveIdMap();
         onLoad(full.name, full.people, full.events, full.eras||[], full.bgSettings||null,
                full.canvasImages||[], full.hiddenEvents||[], full.relationships||[],
-               full.civilizations||[], full.genPeople||[], full.genRels||[], full.customFieldDefs||[], full.categories||null, full.dependencies||[], full.places||[], full.arcs||[], full.markers||[]);
-      } catch (err) { alert(`Could not load timeline: ${err.message}`); }
+               [], full.genPeople||[], full.genRels||[], full.customFieldDefs||[], full.categories||null, full.dependencies||[], full.places||[], full.arcs||[], full.markers||[]);
+      } catch (err) {
+        alert(`Could not load timeline: ${err.message}`);
+        console.error('Firestore load error:', err);
+      }
     } else {
+      // localStorage mode - data is already in the save object
       onLoad(s.name, s.people, s.events, s.eras||[], s.bgSettings||null,
              s.canvasImages||[], s.hiddenEvents||[], s.relationships||[],
              s.civilizations||[], s.genPeople||[], s.genRels||[], s.customFieldDefs||[], s.categories||null, s.dependencies||[], s.places||[], s.arcs||[], s.markers||[]);
@@ -5544,13 +6495,12 @@ const EventPanel = ({ event, people, onClose, onUploadImage, onRemoveImage, onUp
   const handleImgUpload = async e => {
     for (const file of Array.from(e.target.files)) {
       try {
-        const dataUrl = await resizeImage(file, 800, 600);
-        let finalUrl = dataUrl;
-        if (_serverMode) {
-          try { finalUrl = await apiUploadImage(dataUrl, 'events'); } catch { /* fallback to base64 */ }
-        }
-        onUploadImage(event.id, finalUrl);
-      } catch {}
+        // Upload to Firebase Storage (or fall back to base64)
+        const url = await uploadResizedImage(file, 'events', 800, 600);
+        onUploadImage(event.id, url);
+      } catch (err) {
+        console.error('Event image upload failed:', err);
+      }
     }
     e.target.value = '';
   };
@@ -6696,6 +7646,8 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
     if (activeCivs.length > 0) {
       ds.add({ id: '__civs__', content: '🏛', title: 'Civilizations', style: 'border-left:4px solid #c084fc;', order: -1 });
     }
+    // Add "Unassigned" group at bottom for events without people
+    ds.add({ id: '__unassigned__', content: '📌', title: 'Unassigned Events', style: 'border-left:4px solid #6b7280;', order: 9999 });
     // Set vis-timeline height using the calculated value from useMemo
     timelineRef.current?.setOptions({ height: calcHeight });
     // Reset scroll to top when people change, then redraw and measure actual height
@@ -6747,7 +7699,7 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
       });
     });
     // ── Era background bands: one background item per era × group ──
-    const allGroups = [...people.map(p => p.id), '__civs__'];
+    const allGroups = [...people.map(p => p.id), '__civs__', '__unassigned__'];
     erasRef.current.forEach(era => {
       allGroups.forEach(groupId => {
         const eraStart = makeYear(era.yearStart);
@@ -6802,7 +7754,9 @@ const HorizontalTimeline = ({ events, people, onSelectEvent, setOrientation, era
       const certSummary = isUncertain ? `<br/><span style="font-size:10px;color:#f59e0b;">Date certainty: ${e.dateStartCertainty || 'exact'}${e.date_end && e.dateEndCertainty !== 'exact' ? ' / '+e.dateEndCertainty : ''}</span>` : '';
       // Recurring master events are NOT directly draggable — only their expanded occurrences are
       const isMaster = !!e.recurrence && !e._masterId;
-      return { id:e.id, content, start:dateForVis(e.date_start), end:dateForVis(e.date_end), group:e.person_ids[0], type:e.date_end?'range':'box', style:`background-color:${col}1a;border-color:${col};color:${col};border-width:2px;border-style:${borderStyle};`, title:`<strong style="display:block;margin-bottom:3px;">${isRecurring?'↻ ':''}${e.title}</strong><span style="color:#9ca3af;font-size:11px;">${sl}${el} · ${e.category}</span><br/><span style="font-size:11px;color:#d1d5db;">${e.description.slice(0,100)}${e.description.length>100?'…':''}</span>${srcSummary}${certSummary}`, editable: isMaster ? false : { updateTime:true, updateGroup:false, remove:false } };
+      // Fallback to __unassigned__ group if event has no people
+      const groupId = e.person_ids && e.person_ids.length > 0 ? e.person_ids[0] : '__unassigned__';
+      return { id:e.id, content, start:dateForVis(e.date_start), end:dateForVis(e.date_end), group:groupId, type:e.date_end?'range':'box', style:`background-color:${col}1a;border-color:${col};color:${col};border-width:2px;border-style:${borderStyle};`, title:`<strong style="display:block;margin-bottom:3px;">${isRecurring?'↻ ':''}${e.title}</strong><span style="color:#9ca3af;font-size:11px;">${sl}${el} · ${e.category}</span><br/><span style="font-size:11px;color:#d1d5db;">${e.description.slice(0,100)}${e.description.length>100?'…':''}</span>${srcSummary}${certSummary}`, editable: isMaster ? false : { updateTime:true, updateGroup:false, remove:false } };
     }));
     // Add civilization group at top
     const activeCivs = civilizations.filter(c => c.showOnTimeline !== false);
@@ -7495,19 +8449,45 @@ const AddPersonModal = ({ onAdd, onClose, allTags = [] }) => {
   const [position, setPosition]           = useState('');
   const [reference, setRef]               = useState('');
   const [tags, setTags]                   = useState([]);
+  const [photo, setPhoto]                 = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef(null);
   const initials = name.split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0,2).toUpperCase() || '?';
   const canAdd   = name.trim().length > 0;
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPhoto(true);
+    try {
+      const url = await uploadResizedImage(file, 'people', 300, 300);
+      setPhoto(url);
+    } catch (err) {
+      console.error('Photo upload failed:', err);
+      alert('Failed to upload photo. Please try again.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
   const handleAdd = () => {
     if (!canAdd) return;
-    onAdd({ id: uid(), name: name.trim(), birth: birth ?? null, death: death ?? null, birthCertainty, deathCertainty, role, color, initials, photo: null, position: position||'', reference: reference||'', showOnTimeline: true, tags });
+    onAdd({ id: uid(), name: name.trim(), birth: birth ?? null, death: death ?? null, birthCertainty, deathCertainty, role, color, initials, photo: photo || null, position: position||'', reference: reference||'', showOnTimeline: true, tags });
     onClose();
   };
   const fld = { width:'100%', padding:'7px 10px', background:'#0d1117', border:'1px solid #374151', borderRadius:6, color:'#f9fafb', fontSize:13, outline:'none', boxSizing:'border-box' };
   return (
     <Modal title={t('Add Person')} onClose={onClose} width={420}>
       <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:14 }}>
-          <div style={{ width:52, height:52, borderRadius:'50%', background:color, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:700, color:'white', flexShrink:0 }}>{initials}</div>
+        <div style={{ display:'flex', alignItems:'flex-start', gap:14 }}>
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6 }}>
+            <div style={{ width:52, height:52, borderRadius:'50%', background:photo?'transparent':color, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:700, color:'white', flexShrink:0, overflow:'hidden', border:photo?'2px solid '+color:'none' }}>
+              {photo ? <img src={photo} style={{ width:'100%', height:'100%', objectFit:'cover' }} alt={name || 'Person'} /> : initials}
+            </div>
+            <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} style={{ display:'none' }} />
+            <button onClick={() => photoInputRef.current?.click()} disabled={uploadingPhoto} style={{ fontSize:10, padding:'3px 8px', background:'#1f2937', border:'1px solid #374151', borderRadius:5, color:'#9ca3af', cursor:uploadingPhoto?'wait':'pointer', whiteSpace:'nowrap' }}>
+              {uploadingPhoto ? 'Uploading…' : photo ? 'Change' : 'Add photo'}
+            </button>
+            {photo && <button onClick={() => setPhoto('')} style={{ fontSize:10, padding:'3px 8px', background:'none', border:'1px solid #374151', borderRadius:5, color:'#6b7280', cursor:'pointer', whiteSpace:'nowrap' }}>Remove</button>}
+          </div>
           <div style={{ flex:1 }}>
             <label htmlFor="add-person-name" style={{ fontSize:11, color:'#6b7280', display:'block', marginBottom:4 }}>{t('Name *')}</label>
             <input id="add-person-name" autoFocus type="text" value={name} onChange={e => setName(e.target.value)}
@@ -8826,6 +9806,9 @@ const EditPersonModal = ({ person, events, people = [], relationships = [], onUp
   const [reference, setRef]         = useState(person.reference || '');
   const [showOnTimeline, setShow]   = useState(person.showOnTimeline !== false);
   const [tags, setTags]             = useState(person.tags || []);
+  const [photo, setPhoto]           = useState(person.photo || '');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef(null);
   const [linkedEventIds, setLinkedEventIds] = useState(
     () => events.filter(e => e.person_ids.includes(person.id)).map(e => e.id)
   );
@@ -8844,17 +9827,40 @@ const EditPersonModal = ({ person, events, people = [], relationships = [], onUp
   const initials = name.split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0,2).toUpperCase() || '?';
   const canSave  = name.trim().length > 0;
   const toggleEvent = id => setLinkedEventIds(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev,id]);
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPhoto(true);
+    try {
+      const url = await uploadResizedImage(file, 'people', 300, 300);
+      setPhoto(url);
+    } catch (err) {
+      console.error('Photo upload failed:', err);
+      alert('Failed to upload photo. Please try again.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
   const handleSave = () => {
     if (!canSave) return;
-    onSave({ name: name.trim(), birth: birth ?? null, death: death ?? null, birthCertainty, deathCertainty, role, color, position: position||'', reference: reference||'', showOnTimeline, tags }, linkedEventIds);
+    onSave({ name: name.trim(), birth: birth ?? null, death: death ?? null, birthCertainty, deathCertainty, role, color, position: position||'', reference: reference||'', showOnTimeline, tags, photo }, linkedEventIds);
     onClose();
   };
   const fld = { width:'100%', padding:'7px 10px', background:'#0d1117', border:'1px solid #374151', borderRadius:6, color:'#f9fafb', fontSize:13, outline:'none', boxSizing:'border-box' };
   return (
     <Modal title={t('Edit Person')} onClose={onClose} width={440}>
       <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:14 }}>
-          <div style={{ width:52, height:52, borderRadius:'50%', background:color, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:700, color:'white', flexShrink:0 }}>{initials}</div>
+        <div style={{ display:'flex', alignItems:'flex-start', gap:14 }}>
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:6 }}>
+            <div style={{ width:52, height:52, borderRadius:'50%', background:photo?'transparent':color, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:700, color:'white', flexShrink:0, overflow:'hidden', border:photo?'2px solid '+color:'none' }}>
+              {photo ? <img src={photo} style={{ width:'100%', height:'100%', objectFit:'cover' }} alt={name} /> : initials}
+            </div>
+            <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} style={{ display:'none' }} />
+            <button onClick={() => photoInputRef.current?.click()} disabled={uploadingPhoto} style={{ fontSize:10, padding:'3px 8px', background:'#1f2937', border:'1px solid #374151', borderRadius:5, color:'#9ca3af', cursor:uploadingPhoto?'wait':'pointer', whiteSpace:'nowrap' }}>
+              {uploadingPhoto ? 'Uploading…' : photo ? 'Change' : 'Add photo'}
+            </button>
+            {photo && <button onClick={() => setPhoto('')} style={{ fontSize:10, padding:'3px 8px', background:'none', border:'1px solid #374151', borderRadius:5, color:'#6b7280', cursor:'pointer', whiteSpace:'nowrap' }}>Remove</button>}
+          </div>
           <div style={{ flex:1 }}>
             <label htmlFor="edit-person-name" style={{ fontSize:11, color:'#6b7280', display:'block', marginBottom:4 }}>{t('Name *')}</label>
             <input id="edit-person-name" autoFocus type="text" value={name} onChange={e => setName(e.target.value)}
@@ -9341,13 +10347,40 @@ const HELP_SECTIONS = [
     ),
   },
   {
+    id: 'cloud-sync', title: 'Cloud Sync & Offline Mode',
+    content: () => (
+      <div>
+        <h4>Firebase Cloud Sync</h4>
+        <p>When signed in with Firebase, all your timeline data automatically syncs to the cloud. Changes are saved to Firestore (Google Cloud) and synced across all your devices in real-time.</p>
+        <h4>Connection Status Indicator</h4>
+        <p>The connection dot in the toolbar (next to the timeline name) shows your current status:</p>
+        <ul style={{paddingLeft:18,lineHeight:1.8}}>
+          <li><b>🟢 Green dot</b> — Online and connected to Firebase. All changes sync immediately.</li>
+          <li><b>🔴 Red dot</b> — Offline or not signed in. Changes are saved locally and will sync when you reconnect.</li>
+        </ul>
+        <h4>Offline Mode</h4>
+        <p>The app works offline thanks to Firestore's built-in offline persistence. When you lose internet connection:</p>
+        <ul style={{paddingLeft:18,lineHeight:1.8}}>
+          <li>A <b>red banner</b> appears at the top showing "🔴 Offline — No internet connection".</li>
+          <li>You can continue adding, editing, and deleting people and events — all changes are saved locally in IndexedDB.</li>
+          <li>When you reconnect, Firestore automatically syncs all your changes to the cloud.</li>
+          <li>If you're not signed in to Firebase, the banner shows "Not signed in to Firebase — Sign in to sync your data".</li>
+        </ul>
+        <h4>Authentication</h4>
+        <p>Sign in with your Google account or email/password to sync your timelines across devices. All data is private to your account.</p>
+        <p><b>File → Sign Out</b> — logs out and returns to the login screen.</p>
+      </div>
+    ),
+  },
+  {
     id: 'import-export', title: 'Import & Export',
     content: () => (
       <div>
-        <h4>Save / Open (localStorage)</h4>
+        <h4>Save / Load</h4>
         <ul style={{paddingLeft:18,lineHeight:1.8}}>
-          <li><b>Save</b> — saves the current timeline (people, events, eras, backgrounds) to browser localStorage under the timeline name.</li>
-          <li><b>Open</b> — lists all saved timelines. Click to open; ✕ to delete.</li>
+          <li><b>Save (⌘S)</b> — saves the current timeline to Firebase Firestore. A green "Saved ✓" message appears in the toolbar when complete.</li>
+          <li><b>Open</b> — lists all your saved timelines. Click to open; ✕ to delete (with confirmation).</li>
+          <li><b>Save As (⌘⇧S)</b> — saves a copy with a new name, creating a separate timeline.</li>
           <li><b>New</b> — create a new named timeline (blank or with sample data).</li>
         </ul>
         <h4>PNG and PDF export</h4>
@@ -10540,13 +11573,40 @@ const HELP_SECTIONS_AF = [
     ),
   },
   {
+    id: 'cloud-sync', title: 'Wolk-sinkronisering & Vanlyn-modus',
+    content: () => (
+      <div>
+        <h4>Firebase Wolk-sinkronisering</h4>
+        <p>Wanneer jy met Firebase aangemeld is, sinkroniseer al jou tydlyn-data outomaties na die wolk. Veranderinge word na Firestore (Google Cloud) gestoor en in reële tyd oor al jou toestelle gesinkroniseer.</p>
+        <h4>Verbindingstatus-aanduider</h4>
+        <p>Die verbindingstip in die nutsbalk (langs die tydlyn-naam) wys jou huidige status:</p>
+        <ul style={{paddingLeft:18,lineHeight:1.8}}>
+          <li><b>🟢 Groen tip</b> — Aanlyn en verbind met Firebase. Alle veranderinge sinkroniseer onmiddellik.</li>
+          <li><b>🔴 Rooi tip</b> — Vanlyn of nie aangemeld nie. Veranderinge word plaaslik gestoor en sal sinkroniseer wanneer jy weer verbind.</li>
+        </ul>
+        <h4>Vanlyn-modus</h4>
+        <p>Die app werk vanlyn danksy Firestore se ingeboude vanlyn-volharding. Wanneer jy internetverbinding verloor:</p>
+        <ul style={{paddingLeft:18,lineHeight:1.8}}>
+          <li>&#x27;n <b>Rooi banier</b> verskyn bo wat wys "🔴 Vanlyn — Geen internetverbinding".</li>
+          <li>Jy kan voortgaan om mense en gebeure by te voeg, te redigeer en te verwyder — alle veranderinge word plaaslik in IndexedDB gestoor.</li>
+          <li>Wanneer jy weer verbind, sinkroniseer Firestore outomaties al jou veranderinge na die wolk.</li>
+          <li>As jy nie by Firebase aangemeld is nie, wys die banier "Nie by Firebase aangemeld nie — Meld aan om jou data te sinkroniseer".</li>
+        </ul>
+        <h4>Verifikasie</h4>
+        <p>Meld aan met jou Google-rekening of e-pos/wagwoord om jou tydlyne oor toestelle te sinkroniseer. Alle data is privaat tot jou rekening.</p>
+        <p><b>Lêer → Teken Uit</b> — meld af en keer terug na die aanmeld-skerm.</p>
+      </div>
+    ),
+  },
+  {
     id: 'import-export', title: 'Invoer en Uitvoer',
     content: () => (
       <div>
-        <h4>Stoor / Maak Oop (blaaier-geheue)</h4>
+        <h4>Stoor / Laai</h4>
         <ul style={{paddingLeft:18,lineHeight:1.8}}>
-          <li><b>Stoor</b> — stoor die huidige tydlyn (mense, gebeure, afdelings, agtergronde) in blaaier-geheue onder die tydlyn-naam.</li>
-          <li><b>Maak Oop</b> — lys alle gestoorde tydlyne. Klik om te open; ✕ om te verwyder.</li>
+          <li><b>Stoor (⌘S)</b> — stoor die huidige tydlyn na Firebase Firestore. &#x27;n Groen "Gestoor ✓"-boodskap verskyn in die nutsbalk wanneer voltooi.</li>
+          <li><b>Maak Oop</b> — lys alle gestoorde tydlyne. Klik om te open; ✕ om te verwyder (met bevestiging).</li>
+          <li><b>Stoor As (⌘⇧S)</b> — stoor &#x27;n afskrif met &#x27;n nuwe naam, wat &#x27;n aparte tydlyn skep.</li>
           <li><b>Nuut</b> — skep 'n nuwe benaamde tydlyn (leeg of met voorbeelddata).</li>
         </ul>
         <h4>PNG en PDF uitvoer</h4>
@@ -11776,14 +12836,13 @@ const CanvasView = ({ events, people, onSelectEvent, setOrientation, eras, onEdi
   const addImagesFromFiles = (files, dropX = null, dropY = null) => {
     const imgs = Array.from(files).filter(f => f.type.startsWith('image/'));
     if (!imgs.length) return;
-    imgs.forEach((file, i) => {
-      const reader = new FileReader();
-      reader.onload = async ev => {
-        const dataUrl = ev.target.result;
-        let src = dataUrl;
-        if (_serverMode) {
-          try { src = await apiUploadImage(dataUrl, 'canvas'); } catch { /* fallback to base64 */ }
-        }
+
+    imgs.forEach(async (file, i) => {
+      try {
+        // Upload to Firebase Storage (or fall back to base64)
+        const src = await uploadResizedImage(file, 'canvas', 800, 600);
+
+        // Load image to get dimensions
         const el = new Image();
         el.onload = () => {
           const maxW = 400, maxH = 300;
@@ -11792,11 +12851,20 @@ const CanvasView = ({ events, people, onSelectEvent, setOrientation, eras, onEdi
           const rect = artboardRef.current?.getBoundingClientRect();
           const ax = dropX != null && rect ? (dropX - rect.left) / canvasZoom + i * 22 : 80 + i * 22;
           const ay = dropY != null && rect ? (dropY - rect.top)  / canvasZoom + i * 22 : 80 + i * 22;
-          setCanvasImages(prev => [...prev, { id: uid(), src, x: Math.round(ax - w/2), y: Math.round(ay - h/2), w, h, label: file.name.replace(/\.[^.]+$/, '') }]);
+          setCanvasImages(prev => [...prev, {
+            id: uid(),
+            src,
+            x: Math.round(ax - w/2),
+            y: Math.round(ay - h/2),
+            w,
+            h,
+            label: file.name.replace(/\.[^.]+$/, '')
+          }]);
         };
         el.src = src;
-      };
-      reader.readAsDataURL(file);
+      } catch (err) {
+        console.error('Canvas image upload failed:', err);
+      }
     });
   };
 
@@ -14881,6 +15949,7 @@ const MenuBar = ({ onAction, orientation, dateFormat, eras = [], saveMsg, navPoi
       mi(t('Open Recent…'),     'openRecent'),
       S,
       ...(!isReadOnly ? [mi(saveMsg ? `${t('Save')}  ${saveMsg}` : t('Save'), 'save', { shortcut:'⌘S' })] : []),
+      ...(!isReadOnly ? [mi(t('Save As…'), 'saveAs', { shortcut:'⌘⇧S' })] : []),
       mi('🕐 ' + t('Version History…'), 'versionHistory', { shortcut:'⌃⇧H' }),
       mi(t('Export JSON…'),     'exportJson',{ shortcut:'⌘⇧E' }),
       mi(t('Export to PNG') + '…',        'exportPng' ),
@@ -14900,6 +15969,8 @@ const MenuBar = ({ onAction, orientation, dateFormat, eras = [], saveMsg, navPoi
       serverMode
         ? mi('🔗 ' + t('Share…'), 'share')
         : mi('🔗 ' + t('Share… (server required)'), 'noop', { disabled: true }),
+      S,
+      mi('🚪 Sign Out', 'signOut'),
     ],
     Edit: [
       mi(t('Add Event…'),             'addEvent',    { shortcut:'⌘⇧E',   disabled: isReadOnly }),
@@ -15052,15 +16123,34 @@ const MenuBar = ({ onAction, orientation, dateFormat, eras = [], saveMsg, navPoi
 // ─── Toolbar (slim secondary bar: title · search · quick actions) ──────────────
 const Toolbar = ({ timelineName, searchQuery, setSearchQuery, saveMsg, onAddEvent, onAddPerson, onClaude, searchRef, showFilters, onToggleFilters, filtersBadge, lang, setLang, serverMode, shareRole, onShare, collab, sheetsConfig, onSheetsSync, onSheetsOpen }) => {
   const t = useT();
-  const dotColor = serverMode === null ? '#f59e0b' : serverMode ? '#4ade80' : '#6b7280';
-  const dotTitle = serverMode === null ? 'Detecting server…' : serverMode ? 'Server connected — data saved to SQLite database' : 'Local mode — data saved in browser localStorage';
+  const { online, firestoreConnected } = useOnlineStatus();
+
+  // Connection status indicator
+  const isOnline = online && firestoreConnected;
+  const dotColor = isOnline ? '#4ade80' : '#f87171';
+  const dotTitle = isOnline
+    ? 'Online — Firebase connected'
+    : !online
+      ? 'Offline — No internet connection'
+      : 'Offline — Not signed in to Firebase';
+
   const isReadOnly = shareRole === 'viewer' || shareRole === 'commenter';
   // Show PresenceBar only in server mode with a real collab object
   const showPresence = !!serverMode && !!collab;
   const roleBannerColor = { viewer: '#6b7280', commenter: '#f59e0b', editor: '#4ade80' };
   const roleLabel = { viewer: '👁 Viewing as guest', commenter: '💬 Commenter', editor: '✏ Editor' };
+
   return (
   <div style={{ display:'flex', flexDirection:'column', flexShrink:0 }}>
+    {/* Offline warning banner */}
+    {!isOnline && (
+      <div style={{ background: '#7f1d1d', borderBottom:'1px solid #991b1b', padding:'4px 14px', display:'flex', alignItems:'center', gap:8 }}>
+        <span style={{ fontSize:12, fontWeight:600, color:'#fca5a5' }}>🔴 Offline</span>
+        <span style={{ fontSize:11, color:'#fecaca' }}>
+          {!online ? 'No internet connection. Changes will sync when back online.' : 'Not signed in to Firebase. Sign in to sync your data.'}
+        </span>
+      </div>
+    )}
     {/* Share role banner */}
     {shareRole && (
       <div style={{ background: roleBannerColor[shareRole]+'22', borderBottom:`1px solid ${roleBannerColor[shareRole]}44`, padding:'3px 14px', display:'flex', alignItems:'center', gap:8 }}>
@@ -15073,8 +16163,8 @@ const Toolbar = ({ timelineName, searchQuery, setSearchQuery, saveMsg, onAddEven
       <span style={{ fontSize:13, fontWeight:600, color:'#e5e7eb', maxWidth:220, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flexShrink:0 }}>
         {timelineName}
       </span>
-      {/* Server connection indicator */}
-      <span title={dotTitle} aria-label={dotTitle} role="img" style={{ width:8, height:8, borderRadius:'50%', background:dotColor, flexShrink:0, display:'inline-block', boxShadow: serverMode ? `0 0 5px ${dotColor}` : 'none' }} />
+      {/* Connection status indicator */}
+      <span title={dotTitle} aria-label={dotTitle} role="img" style={{ width:8, height:8, borderRadius:'50%', background:dotColor, flexShrink:0, display:'inline-block', boxShadow: isOnline ? `0 0 5px ${dotColor}` : 'none' }} />
       {/* WCAG 4.1.3 — live region announces save status to screen readers */}
       <span role="status" aria-live="polite" aria-atomic="true" style={{ fontSize:11, color: saveMsg && saveMsg.includes('fail') ? '#f87171' : '#4ade80', flexShrink:0, minWidth:0 }}>{saveMsg || ''}</span>
       <div style={{ flex:1, display:'flex', justifyContent:'center' }}>
@@ -18124,13 +19214,36 @@ const getRecentTimelines = () => {
   } catch (_e) { return []; }
 };
 
-const WelcomeScreen = ({ savedTimelines, onOpen, onNew, onImport, onTemplates, onContinue, serverMode }) => {
+const WelcomeScreen = ({ savedTimelines, onOpen, onNew, onImport, onTemplates, onContinue, onDelete, serverMode }) => {
+  const [deleting, setDeleting] = React.useState(null);
+
   const fmtMod = (iso) => {
     if (!iso) return '';
     try {
       const d = new Date(iso);
-      return `Modified ${d.getDate()} ${MONTH_ABR[d.getMonth()]}`;
+      const now = new Date();
+      const diffMs = now - d;
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
+
+      if (diffMins < 60) return diffMins <= 1 ? 'Just now' : `${diffMins}m ago`;
+      if (diffHours < 24) return `${diffHours}h ago`;
+      if (diffDays < 7) return `${diffDays}d ago`;
+      return `${d.getDate()} ${MONTH_ABR[d.getMonth()]}`;
     } catch { return ''; }
+  };
+
+  const handleDelete = async (e, tl) => {
+    e.stopPropagation();
+    const confirmed = window.confirm(`Delete "${tl.name}"?\n\nThis action cannot be undone.`);
+    if (!confirmed) return;
+    setDeleting(tl.name);
+    try {
+      await onDelete(tl.name);
+    } finally {
+      setDeleting(null);
+    }
   };
 
   const isFirstTime = savedTimelines.length === 0;
@@ -18204,32 +19317,62 @@ const WelcomeScreen = ({ savedTimelines, onOpen, onNew, onImport, onTemplates, o
               >Open / Import…</button>
             </div>
 
-            {/* Recent timelines */}
+            {/* My Timelines */}
             <div>
-              <div style={{ fontSize:12, fontWeight:600, color:'#6b7280', textTransform:'uppercase', letterSpacing:'.07em', marginBottom:10 }}>Recent Timelines</div>
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))', gap:10 }}>
+              <div style={{ fontSize:12, fontWeight:600, color:'#6b7280', textTransform:'uppercase', letterSpacing:'.07em', marginBottom:10 }}>
+                My Timelines
+                <span style={{ fontSize:11, fontWeight:400, color:'#4b5563', marginLeft:8 }}>({savedTimelines.length})</span>
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))', gap:12 }}>
                 {savedTimelines.map(tl => (
-                  <div key={tl.name} style={cardStyle}
+                  <div key={tl.name}
+                    className="timeline-card"
+                    style={{
+                    ...cardStyle,
+                    position:'relative',
+                    opacity: deleting === tl.name ? 0.4 : 1,
+                    pointerEvents: deleting === tl.name ? 'none' : 'auto'
+                  }}
                     onClick={() => onOpen(tl.name)}
                     onMouseOver={cardHover} onMouseOut={cardLeave}
                     role="button" tabIndex={0}
                     onKeyDown={e => e.key === 'Enter' && onOpen(tl.name)}
                   >
+                    {/* Delete button */}
+                    <button
+                      onClick={e => handleDelete(e, tl)}
+                      aria-label={`Delete ${tl.name}`}
+                      title="Delete timeline"
+                      style={{
+                        position:'absolute', top:8, right:8, width:24, height:24,
+                        borderRadius:5, background:'#1f2937', border:'1px solid #374151',
+                        color:'#6b7280', fontSize:12, cursor:'pointer',
+                        display:'flex', alignItems:'center', justifyContent:'center',
+                        opacity:0, transition:'opacity .15s'
+                      }}
+                      onMouseOver={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.background='#7f1d1d'; e.currentTarget.style.color='#fca5a5'; }}
+                      onMouseOut={e => { e.currentTarget.style.opacity='0'; e.currentTarget.style.background='#1f2937'; e.currentTarget.style.color='#6b7280'; }}
+                      className="timeline-delete-btn"
+                    >✕</button>
+
                     {/* Colour swatch strip */}
-                    {tl.colors.length > 0 && (
-                      <div style={{ display:'flex', gap:3, marginBottom:6 }}>
+                    {tl.colors && tl.colors.length > 0 && (
+                      <div style={{ display:'flex', gap:3, marginBottom:8 }}>
                         {tl.colors.map((c, i) => (
-                          <div key={i} style={{ flex:1, height:5, borderRadius:3, background:c, minWidth:8 }} />
+                          <div key={i} style={{ flex:1, height:6, borderRadius:3, background:c, minWidth:10 }} />
                         ))}
                       </div>
                     )}
-                    <div style={{ fontWeight:700, color:'#f9fafb', fontSize:14, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{tl.name}</div>
-                    <div style={{ fontSize:12, color:'#9ca3af' }}>
+
+                    <div style={{ fontWeight:700, color:'#f9fafb', fontSize:15, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{tl.name}</div>
+
+                    <div style={{ fontSize:12, color:'#9ca3af', marginTop:2 }}>
                       {tl.eventCount} event{tl.eventCount !== 1 ? 's' : ''}
                       {tl.personCount > 0 && ` · ${tl.personCount} people`}
                     </div>
+
                     {tl.lastModified && (
-                      <div style={{ fontSize:11, color:'#6b7280', marginTop:2 }}>{fmtMod(tl.lastModified)}</div>
+                      <div style={{ fontSize:11, color:'#6b7280', marginTop:4 }}>{fmtMod(tl.lastModified)}</div>
                     )}
                   </div>
                 ))}
@@ -18263,10 +19406,10 @@ const WelcomeScreen = ({ savedTimelines, onOpen, onNew, onImport, onTemplates, o
           </div>
         )}
 
-        {/* Server status */}
+        {/* Firebase connection status */}
         <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:7, fontSize:12, color:'#6b7280' }}>
-          <span style={{ width:8, height:8, borderRadius:'50%', background: serverMode === true ? '#10b981' : '#4b5563', display:'inline-block' }} />
-          {serverMode === true ? 'Connected to local server' : 'Local mode — saved in browser storage'}
+          <span style={{ width:8, height:8, borderRadius:'50%', background: auth?.currentUser ? '#10b981' : '#6b7280', display:'inline-block', boxShadow: auth?.currentUser ? '0 0 6px #10b981' : 'none' }} />
+          {auth?.currentUser ? `Signed in as ${auth.currentUser.email}` : 'Not signed in — timelines saved locally'}
         </div>
 
         {/* Continue without selecting */}
@@ -21141,6 +22284,38 @@ const TreeToolbar = ({ style, setStyle, showStylePanel, setShowStylePanel, zoom,
 // ─── End TreeView ──────────────────────────────────────────────────────────────
 
 const App = () => {
+  // ─── Firebase Auth State ─────────────────────────────────────────────────────
+  const [user, setUser] = useState(null); // Firebase authenticated user
+  const [authLoading, setAuthLoading] = useState(true); // Loading initial auth state
+
+  // Listen to auth state changes
+  useEffect(() => {
+    if (!auth) {
+      console.warn('Firebase auth not available');
+      setAuthLoading(false);
+      return;
+    }
+
+    const unsubscribe = auth.onAuthStateChanged(
+      (firebaseUser) => {
+        setUser(firebaseUser);
+        setAuthLoading(false);
+        if (firebaseUser) {
+          console.log('✅ User signed in:', firebaseUser.email || firebaseUser.displayName);
+        } else {
+          console.log('🔒 User signed out');
+        }
+      },
+      (error) => {
+        console.error('Auth state change error:', error);
+        setAuthLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  // ─── Timeline State ──────────────────────────────────────────────────────────
   const [timelineName, setTimelineName]             = useState('');
   const [people, setPeople]                         = useState([]);
   const [events, setEvents]                         = useState([]);
@@ -21152,6 +22327,7 @@ const App = () => {
   const [searchQuery, setSearchQuery]               = useState('');
   const [orientation, setOrientation]               = useState('horizontal');
   const [showNew, setShowNew]                       = useState(false);
+  const [showSaveAs, setShowSaveAs]                 = useState(false);
   const [showTemplateGallery, setShowTemplateGallery] = useState(false);
 
   // Auto-show template gallery on first ever load if no timelines are saved
@@ -21296,6 +22472,9 @@ const App = () => {
   }, []);
 
   const loadTimeline = useCallback((name, newPeople, newEvents, newEras = null, newBg = null, newCanvasImages = [], newHiddenEvents = [], newRelationships = [], newCivs = [], newGenPeople = [], newGenRels = [], newCustomFieldDefs = [], newCategories = null, newDependencies = [], newPlaces = [], newArcs = [], newMarkers = []) => {
+    // Flag that we're loading to prevent dirty-tracking useEffect from marking as unsaved
+    isLoadingRef.current = true;
+
     setTimelineName(name); setPeople(newPeople); setEvents(newEvents);
     const loadedCats = (newCategories && newCategories.length > 0) ? newCategories : DEFAULT_CATEGORIES;
     setCategories(loadedCats);
@@ -21319,6 +22498,10 @@ const App = () => {
     setPlaces(newPlaces || []);
     setArcs(newArcs || []);
     setMarkers((newMarkers || []).filter(m => !m.builtIn)); // never persist builtIn Today
+    hasUnsavedRef.current = false; // Clean load — not unsaved
+
+    // Reset loading flag after React has flushed all state updates
+    setTimeout(() => { isLoadingRef.current = false; }, 100);
   }, []);
 
   const handleNew    = (name, withSample) => { loadTimeline(name, withSample ? SAMPLE_PEOPLE : [], withSample ? SAMPLE_EVENTS : [], [], DEFAULT_BG, [], [], [], [], [], [], [], DEFAULT_CATEGORIES, [], [], [], []); setWelcomeDismissed(false); };
@@ -21385,10 +22568,46 @@ const App = () => {
     );
   }, [timelineName, loadTimeline]);
 
-  const collab = useCollaboration(collabTimelineId, !!serverMode, handleRemoteChange, hasUnsavedRef);
+  // WebSocket collaboration removed — Firestore .onSnapshot() provides real-time sync natively
+  // const collab = useCollaboration(collabTimelineId, !!serverMode, handleRemoteChange, hasUnsavedRef);
+  const collab = null; // WebSocket removed — stub so PresenceBar prop compiles
+
+  // Track whether we're currently applying a remote update or loading a timeline (to avoid marking as unsaved)
+  const isRemoteUpdateRef = useRef(false);
+  const isLoadingRef = useRef(false);
+
+  // ─── Real-time Firestore Sync ─────────────────────────────────────────────────
+  // Subscribe to timeline changes when using Firestore (not localStorage)
+  useEffect(() => {
+    if (!db || !auth?.currentUser || !timelineName) return;
+
+    const timelineId = _timelineIdMap[timelineName];
+    if (!timelineId) return; // Timeline hasn't been saved yet
+
+    // Subscribe to real-time updates
+    const unsubscribe = subscribeToTimeline(timelineId, (updatedTimeline) => {
+      // Only apply remote changes if we don't have unsaved local changes
+      if (!hasUnsavedRef.current) {
+        console.log('🔄 Applying remote timeline update');
+        isRemoteUpdateRef.current = true; // Flag that this is a remote update
+        handleRemoteChange(updatedTimeline);
+        // Reset flag after state updates complete
+        setTimeout(() => { isRemoteUpdateRef.current = false; }, 100);
+      } else {
+        console.log('⏸️  Skipping remote update (unsaved local changes)');
+      }
+    });
+
+    return unsubscribe; // Cleanup on unmount or timeline change
+  }, [timelineName, handleRemoteChange]);
 
   // Mark unsaved whenever key state changes (track dirty flag)
-  useEffect(() => { hasUnsavedRef.current = true; }, [people, events, eras, bgSettings, canvasImages, relationships, customFieldDefs, categories, dependencies, places, arcs, markers]);
+  // EXCEPT when the change is from a remote update or a timeline load
+  useEffect(() => {
+    if (!isRemoteUpdateRef.current && !isLoadingRef.current) {
+      hasUnsavedRef.current = true;
+    }
+  }, [people, events, eras, bgSettings, canvasImages, relationships, customFieldDefs, categories, dependencies, places, arcs, markers]);
 
   const handleSave   = useCallback(() => {
     setSaveMsg('Saving…');
@@ -21401,13 +22620,32 @@ const App = () => {
         hasUnsavedRef.current = false;
         setSaveMsg('Saved ✓');
         setTimeout(() => setSaveMsg(''), 2200);
-        // Broadcast to collaborators (throttled; only in server mode)
-        if (serverMode && collabTimelineId) {
-          collab.sendChange(payload);
-        }
+        // Firestore sync happens automatically via .onSnapshot() listeners
       })
       .catch(err => { console.error('Save error:', err); setSaveMsg('Save failed'); setTimeout(() => setSaveMsg(''), 3000); });
-  }, [timelineName, people, events, eras, bgSettings, canvasImages, hiddenEvents, relationships, civilizations, genPeople, genRels, customFieldDefs, categories, dependencies, places, arcs, markers, serverMode, collabTimelineId, collab]);
+  }, [timelineName, people, events, eras, bgSettings, canvasImages, hiddenEvents, relationships, civilizations, genPeople, genRels, customFieldDefs, categories, dependencies, places, arcs, markers]);
+
+  const handleSaveAs = useCallback((newName) => {
+    setSaveMsg('Saving…');
+    const savedMarkers = markers.filter(m => !m.builtIn);
+
+    // Save with new name (this creates a new timeline in Firestore)
+    saveToStorage(newName, people, events, eras, bgSettings, canvasImages, Array.from(hiddenEvents), relationships, civilizations, genPeople, genRels, customFieldDefs, categories, dependencies, places, arcs, savedMarkers)
+      .then(() => {
+        // Update timeline name in state
+        setTimelineName(newName);
+        hasUnsavedRef.current = false;
+        setSaveMsg('Saved ✓');
+        setTimeout(() => setSaveMsg(''), 2200);
+        setShowSaveAs(false);
+      })
+      .catch(err => {
+        console.error('Save As error:', err);
+        setSaveMsg('Save failed');
+        setTimeout(() => setSaveMsg(''), 3000);
+      });
+  }, [people, events, eras, bgSettings, canvasImages, hiddenEvents, relationships, civilizations, genPeople, genRels, customFieldDefs, categories, dependencies, places, arcs, markers]);
+
   const handleExport = () => exportJSON(timelineName, people, events, eras, bgSettings, canvasImages, Array.from(hiddenEvents), relationships, civilizations, genPeople, genRels, customFieldDefs, categories, dependencies, places, arcs, markers.filter(m => !m.builtIn));
 
   const handleMenuAction = useCallback((action) => {
@@ -21425,6 +22663,7 @@ const App = () => {
       case 'share':          setShowShare(true); break;
       case 'versionHistory': setShowVersionHistory(true); break;
       case 'save':          handleSave(); break;
+      case 'saveAs':        setShowSaveAs(true); break;
       case 'exportJson':    handleExport(); break;
       case 'exportPng':     setShowExport('png'); break;
       case 'exportPdf':     setShowExport('pdf'); break;
@@ -21473,6 +22712,13 @@ const App = () => {
       case 'manageCategories':  setShowCategoryManager(true); break;
       case 'manageMarkers':     setShowMarkersModal(true); break;
       case 'apiWebhooks':       setShowAPIModal(true); break;
+      case 'signOut':
+        if (auth) {
+          auth.signOut()
+            .then(() => console.log('✅ User signed out successfully'))
+            .catch(err => console.error('❌ Sign out error:', err));
+        }
+        break;
       default: break;
     }
   }, [handleSave, handleExport]);
@@ -21783,7 +23029,8 @@ const App = () => {
   const filteredEvents = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return events.filter(e => {
-      if (!e.person_ids.some(id => selectedPeople.has(id))) return false;
+      // Only filter by person if event has people; standalone events always show
+      if (e.person_ids.length > 0 && !e.person_ids.some(id => selectedPeople.has(id))) return false;
       if (!selectedCategories.has(e.category)) return false;
       if (hiddenEvents.has(e.id)) return false;
       // Tag filter: if any of the event's tags are hidden, hide the event
@@ -21835,10 +23082,164 @@ const App = () => {
   }, []);
 
   // Build recent timelines list for WelcomeScreen and RecentFilesModal
-  const savedTimelines = useMemo(() => getRecentTimelines(), [timelineName]);
+  const [firestoreTimelines, setFirestoreTimelines] = useState([]);
+
+  // Load Firestore timelines on mount and when timeline changes
+  useEffect(() => {
+    if (!db || !auth?.currentUser) return;
+
+    listUserTimelines().then(async timelines => {
+      // Load counts and colors for each timeline
+      const formatted = await Promise.all(timelines.map(async t => {
+        try {
+          // Load minimal data to get counts and colors
+          const peopleSnap = await db.collection('timelines').doc(t.id).collection('people').limit(100).get();
+          const eventsSnap = await db.collection('timelines').doc(t.id).collection('events').limit(100).get();
+
+          const people = peopleSnap.docs.map(d => d.data());
+          const events = eventsSnap.docs.map(d => d.data());
+
+          // Collect unique category colors from events
+          const colorSet = new Map();
+          events.forEach(e => {
+            if (e.category) {
+              const cats = t.categories && t.categories.length ? t.categories : DEFAULT_CATEGORIES;
+              const catObj = cats.find(c => c.name === e.category);
+              if (catObj && catObj.color) colorSet.set(e.category, catObj.color);
+            }
+          });
+
+          return {
+            name: t.name,
+            eventCount: eventsSnap.size,
+            personCount: peopleSnap.size,
+            lastModified: t.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+            colors: [...colorSet.values()].slice(0, 8),
+            _firestoreId: t.id
+          };
+        } catch (err) {
+          console.warn('Failed to load counts for timeline:', t.id, err);
+          return {
+            name: t.name,
+            eventCount: 0,
+            personCount: 0,
+            lastModified: t.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+            colors: [],
+            _firestoreId: t.id
+          };
+        }
+      }));
+
+      // Sort by lastModified desc
+      formatted.sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified));
+      setFirestoreTimelines(formatted);
+    }).catch(err => console.error('Failed to load Firestore timelines:', err));
+  }, [timelineName]);
+
+  // Use Firestore timelines if available, otherwise localStorage
+  const savedTimelines = useMemo(() => {
+    if (db && auth?.currentUser && firestoreTimelines.length > 0) {
+      return firestoreTimelines; // Show all timelines (already sorted by date desc)
+    }
+    // For localStorage, return all timelines (not just 5)
+    try {
+      const saves = loadSaves();
+      if (!saves || saves.length === 0) return [];
+      const all = [...saves].reverse(); // Newest first
+      return all.map(s => {
+        const colorSet = new Map();
+        (s.events || []).forEach(e => {
+          if (e.category) {
+            const cats = s.categories && s.categories.length ? s.categories : DEFAULT_CATEGORIES;
+            const catObj = cats.find(c => c.name === e.category);
+            if (catObj && catObj.color) colorSet.set(e.category, catObj.color);
+          }
+        });
+        return {
+          name: s.name,
+          eventCount: (s.events || []).length,
+          personCount: (s.people || []).length,
+          lastModified: s.savedAt || null,
+          colors: [...colorSet.values()].slice(0, 8),
+        };
+      });
+    } catch (_e) { return []; }
+  }, [firestoreTimelines, timelineName]);
+
+  // Handler to delete a timeline from WelcomeScreen
+  const handleDeleteTimeline = useCallback(async (name) => {
+    try {
+      await deleteFromStorage(name);
+      // Refresh Firestore timelines list
+      if (db && auth?.currentUser) {
+        const timelines = await listUserTimelines();
+        const formatted = await Promise.all(timelines.map(async t => {
+          try {
+            const peopleSnap = await db.collection('timelines').doc(t.id).collection('people').limit(100).get();
+            const eventsSnap = await db.collection('timelines').doc(t.id).collection('events').limit(100).get();
+            const people = peopleSnap.docs.map(d => d.data());
+            const events = eventsSnap.docs.map(d => d.data());
+            const colorSet = new Map();
+            events.forEach(e => {
+              if (e.category) {
+                const cats = t.categories && t.categories.length ? t.categories : DEFAULT_CATEGORIES;
+                const catObj = cats.find(c => c.name === e.category);
+                if (catObj && catObj.color) colorSet.set(e.category, catObj.color);
+              }
+            });
+            return {
+              name: t.name,
+              eventCount: eventsSnap.size,
+              personCount: peopleSnap.size,
+              lastModified: t.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+              colors: [...colorSet.values()].slice(0, 8),
+              _firestoreId: t.id
+            };
+          } catch (err) {
+            return {
+              name: t.name,
+              eventCount: 0,
+              personCount: 0,
+              lastModified: t.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+              colors: [],
+              _firestoreId: t.id
+            };
+          }
+        }));
+        formatted.sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified));
+        setFirestoreTimelines(formatted);
+      }
+    } catch (err) {
+      console.error('Delete failed:', err);
+      alert('Failed to delete timeline. Please try again.');
+    }
+  }, []);
 
   // Handler to open a saved timeline by name (from WelcomeScreen or RecentFilesModal)
-  const handleOpenRecent = useCallback((name) => {
+  const handleOpenRecent = useCallback(async (name) => {
+    // Try Firestore first
+    if (db && auth?.currentUser) {
+      const firestoreEntry = firestoreTimelines.find(t => t.name === name);
+      if (firestoreEntry && firestoreEntry._firestoreId) {
+        try {
+          const timeline = await loadTimelineFromFirestore(firestoreEntry._firestoreId);
+          handleLoad(
+            timeline.name, timeline.people, timeline.events,
+            timeline.eras, timeline.bgSettings, timeline.canvasImages,
+            [], timeline.relationships, [],
+            [], [], timeline.customFieldDefs,
+            timeline.categories, timeline.dependencies, timeline.places, timeline.arcs,
+            timeline.markers
+          );
+          setWelcomeDismissed(true);
+          return;
+        } catch (err) {
+          console.error('Failed to load from Firestore:', err);
+        }
+      }
+    }
+
+    // Fallback to localStorage
     const saves = loadSaves();
     const entry = saves.find(s => s.name === name);
     if (!entry) return;
@@ -21851,9 +23252,50 @@ const App = () => {
       entry.markers || []
     );
     setWelcomeDismissed(true);
-  }, [handleLoad]);
+  }, [firestoreTimelines, handleLoad]);
 
   const showWelcome = !welcomeDismissed && !timelineName && people.length === 0 && events.length === 0;
+
+  // ─── Firebase Auth Guard ─────────────────────────────────────────────────────
+  // Show loading spinner while checking auth state
+  if (authLoading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: '#9ca3af',
+        fontSize: '14px'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            width: '48px',
+            height: '48px',
+            border: '4px solid #374151',
+            borderTopColor: '#6366f1',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto 16px'
+          }}></div>
+          <p>Loading...</p>
+        </div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  // Show login screen if user is not authenticated
+  // DEV MODE: If Firebase is not initialized, allow bypass
+  if (!user && auth) {
+    return <LoginScreen />;
+  }
+
+  // Firebase not configured - allow access without auth (dev mode)
+  if (!user && !auth) {
+    console.warn('⚠️  Firebase not configured - running in development mode without authentication');
+  }
 
   return (
     <I18nCtx.Provider value={{ t, lang }}>
@@ -21897,6 +23339,7 @@ const App = () => {
             onImport={() => setShowOpen(true)}
             onTemplates={() => setShowTemplateGallery(true)}
             onContinue={() => setWelcomeDismissed(true)}
+            onDelete={handleDeleteTimeline}
             serverMode={serverMode}
           />
         )}
@@ -21970,6 +23413,7 @@ const App = () => {
         />
       )}
       {showNew       && <NewTimelineModal  onConfirm={handleNew}  onClose={() => setShowNew(false)} onBrowseTemplates={() => { setShowNew(false); setShowTemplateGallery(true); }} />}
+      {showSaveAs    && <SaveAsModal currentName={timelineName} onConfirm={handleSaveAs} onClose={() => setShowSaveAs(false)} />}
       {showOpen      && <OpenTimelineModal onLoad={handleLoad}    onClose={() => setShowOpen(false)} />}
       {showTemplateGallery && <TemplateGalleryModal onUseTemplate={handleUseTemplate} onClose={() => setShowTemplateGallery(false)} />}
       {showBg        && <BgSettingsModal  bg={bgSettings} onSave={setBgSettings} onClose={() => setShowBg(false)} />}

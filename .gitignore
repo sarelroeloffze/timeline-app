@@ -33,3 +33,10 @@ Thumbs.db
 uvicorn.log
 mcp-server/.env
 mcp-server/node_modules
+
+# ── IDE / Editor settings (local) ───────────────────────────────────────────────
+.claude/settings.local.json
+
+# ── Backup files (temporary) ────────────────────────────────────────────────────
+index-backup-*.html
+*-backup-*.html
