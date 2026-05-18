@@ -281,6 +281,62 @@ ipcMain.handle('show-save-dialog', async (_event, options) => {
   return result;
 });
 
+// ─── Backup folder operations ───────────────────────────────────────────────
+
+ipcMain.handle('choose-backup-folder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory'],
+    title: 'Choose Backup Folder',
+    buttonLabel: 'Select Folder',
+  });
+  if (result.canceled) return null;
+  return result.filePaths[0];
+});
+
+ipcMain.handle('write-backup-file', async (_event, folderPath, filename, jsonContent) => {
+  try {
+    const filePath = path.join(folderPath, filename);
+    fs.writeFileSync(filePath, jsonContent, 'utf-8');
+    return { success: true, path: filePath };
+  } catch (err) {
+    return { success: false, error: String(err) };
+  }
+});
+
+ipcMain.handle('list-backup-files', async (_event, folderPath, timelineName) => {
+  try {
+    if (!fs.existsSync(folderPath)) return [];
+    const allFiles = fs.readdirSync(folderPath);
+    // Match pattern: {timelineName}-backup-*.json
+    const pattern = `${timelineName}-backup-`;
+    const backups = allFiles
+      .filter(f => f.startsWith(pattern) && f.endsWith('.json'))
+      .map(f => ({
+        name: f,
+        path: path.join(folderPath, f),
+        stat: fs.statSync(path.join(folderPath, f)),
+      }))
+      .sort((a, b) => b.stat.mtimeMs - a.stat.mtimeMs); // newest first
+    return backups.map(b => ({ name: b.name, path: b.path, mtime: b.stat.mtimeMs }));
+  } catch (err) {
+    console.error('list-backup-files error:', err);
+    return [];
+  }
+});
+
+ipcMain.handle('delete-backup-files', async (_event, filePaths) => {
+  try {
+    for (const filePath of filePaths) {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: String(err) };
+  }
+});
+
 // ─── App lifecycle ──────────────────────────────────────────────────────────
 
 app.whenReady().then(createWindow);
