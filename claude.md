@@ -1108,7 +1108,7 @@ match /timelines/{timelineId}/{allPaths=**} {
 ### Current Status
 
 **Date:** 2026-05-18
-**Phase:** ✅ **PHASES 1-7 COMPLETE** — Firebase migration fully functional
+**Phase:** ✅ **ALL PHASES COMPLETE (1-8)** — Firebase migration + cloud backup fully functional
 **Implementation Period:** May 15-18, 2026
 
 **Completed Phases:**
@@ -1119,6 +1119,7 @@ match /timelines/{timelineId}/{allPaths=**} {
 - ✅ Phase 5: Real-time sync via `.onSnapshot()` listeners
 - ✅ Phase 6: My Timelines Dashboard with counts, colors, delete
 - ✅ Phase 7: Offline mode with banner + connection detection
+- ✅ Phase 8: Cloud Backup Integration (Electron-only auto-backup to local folder)
 
 **Critical Bugs Fixed:**
 - IndexedDB corruption (removed blanket clearPersistence())
@@ -1127,8 +1128,13 @@ match /timelines/{timelineId}/{allPaths=**} {
 - Horizontal view unassigned events invisible (added __unassigned__ group)
 - Person photo upload missing (implemented in Add/Edit Person modals)
 
-**Pending:**
-- Phase 8: Cloud Backup Integration (optional)
+**Cloud Backup Features (Phase 8):**
+- Auto-backup to user-selected folder (Dropbox/OneDrive/local)
+- Configurable auto-save interval (1/5/10/30 minutes)
+- Auto-prune: keep last N backups (5/10/20/50)
+- Exit backup on app quit if unsaved changes
+- Toolbar indicator shows last backup time
+- Electron-only (not available in browser mode)
 
 **Architecture Change Complete:**
 - ❌ `server.py` removed
@@ -1143,6 +1149,10 @@ match /timelines/{timelineId}/{allPaths=**} {
 
 ## Next Immediate Step
 
-**Firebase Migration Complete** — All core phases delivered and tested. App now runs on Firebase infrastructure with automatic multi-device sync, offline support, and cloud storage.
+**Firebase Migration Complete (All Phases 1-8)** — App fully cloud-native with automatic sync, offline support, and local backup.
 
-**Optional Next:** Phase 8 (Cloud Backup Integration) — auto-export JSON to Dropbox/OneDrive folder after every save.
+**Ready for:**
+- Production testing (multi-device, offline mode, backup restore)
+- Electron build update (package with Firebase dependencies)
+- User documentation (setup guide, backup instructions)
+- Optional: Additional features or UX improvements
