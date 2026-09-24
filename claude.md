@@ -129,36 +129,65 @@ Single-file React app (no build step — open directly in browser). Uses CDN-loa
 
 ## File Structure
 
+**Current (Firebase era — May 2026):**
 ```
 timeline/
-  index.html        ← Single-file React app — open via server (http://localhost:8765) or directly in browser
-  server.py         ← FastAPI backend; SQLite CRUD + image upload + /api/claude streaming
-  timeline.db       ← SQLite database (auto-created on first run)
-  requirements.txt  ← Python deps: anthropic, fastapi, uvicorn, python-multipart
-  images/
-    people/         ← Person profile photos (uploaded via /api/upload/image?category=people)
-    events/         ← Event images (uploaded via /api/upload/image?category=events)
-    canvas/         ← Canvas artboard overlay images
-  CLAUDE.md         ← This file — project notes and status
-  .claude/
-    launch.json     ← Preview server config (runs server.py on port 8765)
+  index.html           ← Single-file React app + Firebase SDK (1.4MB)
+  main.js, preload.js  ← Electron wrapper
+  package.json         ← Electron dependencies
+  
+  images/              ← (Empty — images now in Firebase Storage)
+    people/
+    events/
+    canvas/
+  
+  mcp-server/          ← Dev tools
+    bridge.js          ← HTTP bridge for dev.html panel (localhost:3131)
+    .env               ← API key + project path
+  
+  dev.html             ← Floating dev assistant panel
+  
+  CLAUDE.md            ← This file — project notes and status
+  FIREBASE_SETUP_GUIDE.md
+  BUILD.md
+  
+  Team/                ← AI team member personas
+  Owner's Inbox/       ← Delivery notes (REED_DELIVERY_*.md files)
+  biblical-data/       ← Sample timeline data
+  Photos/, Photos2/    ← UI reference screenshots
+  
+  dist/                ← Electron build output (excluded from Dropbox)
+    Timeline Setup 1.0.0.exe
 ```
 
-## Running the App (with Claude AI)
+**Archived (moved to ~/Desktop/Timeline-Archive-20260924/):**
+```
+  server.py            ← OLD FastAPI backend (replaced by Firebase)
+  timeline.db          ← OLD SQLite database (replaced by Firestore)
+  requirements.txt     ← OLD Python dependencies
+  index-backup-*.html  ← 6 old backups (~8MB)
+```
 
+**External (not in project folder):**
+```
+  ~/Documents/timeline-mcp/  ← MCP server for Claude Desktop
+    server.js                 ← Gives Claude Desktop access to project files
+    .env                      ← API key + TIMELINE_PATH
+    node_modules/
+```
+
+## Running the App
+
+**Browser Mode:**
+Just open `index.html` in a browser. Firebase handles all backend operations (auth, database, storage).
+
+**Electron Desktop App:**
 ```bash
-# One-time setup
-pip install -r requirements.txt
-
-# Set your API key
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# Start the server
-python server.py
-# → open http://localhost:8765
+npm start
+# Or run the built installer: dist/Timeline Setup 1.0.0.exe
 ```
 
-The 🤖 Claude button (top bar or floating FAB) opens the AI chat panel.
+**No Python server needed** — Firebase replaced the old `server.py` backend.
 
 ---
 
@@ -822,9 +851,10 @@ git log --oneline -5
 
 **3. Key files and what they contain:**
 - `index.html` (1.37 MB) — entire frontend (React, all 13 view modes, all components, all modals)
-- `server.py` (115 KB) — FastAPI backend + SQLite CRUD + Claude AI endpoints + WebSocket collaboration
-- `timeline.db` — SQLite database (WAL mode, 9 tables)
-- `mcp-server/` — Dev Assistant (bridge.js + MCP server.js + .env)
+- `server.py` (115 KB) — ⚠️ ARCHIVED — old FastAPI backend (replaced by Firebase)
+- `timeline.db` — ⚠️ ARCHIVED — old SQLite database (replaced by Firestore)
+- `mcp-server/` — Dev Assistant HTTP bridge (bridge.js for localhost:3131)
+- `~/Documents/timeline-mcp/` — MCP server for Claude Desktop (moved from project folder due to macOS sandbox restrictions)
 - `dev.html` — Dev panel UI (connects to bridge on localhost:3131)
 
 ---
@@ -843,11 +873,13 @@ git log --oneline -5
 - Updated Help sections (if features added)
 
 **Never commit:**
-- `timeline.db` (gitignored — database file)
+- `timeline.db*` (archived — old SQLite database files)
+- `server.py`, `requirements.txt` (archived — old FastAPI backend)
 - `mcp-server/.env` (gitignored — API key)
 - `mcp-server/node_modules/` (gitignored — npm packages)
 - User data files in `images/people/`, `images/events/`, `images/canvas/` (gitignored)
 - `.claude/settings.local.json` (local IDE settings)
+- `dist/` (excluded from Dropbox sync via `xattr` — build output)
 
 **Commit message format:**
 ```
@@ -866,6 +898,9 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 
 Local development tool for fault-finding and AI-assisted coding.
 
+### **Two Components:**
+
+#### **1. HTTP Bridge (for dev.html panel)**
 **Start:**
 ```bash
 cd ~/Library/CloudStorage/Dropbox/AAA\ Claud/timeline/mcp-server && node bridge.js
@@ -875,13 +910,39 @@ cd ~/Library/CloudStorage/Dropbox/AAA\ Claud/timeline/mcp-server && node bridge.
 
 **API key:** Stored in browser localStorage (only entered once)
 
-**MCP bridge:** Gives Claude read/write access to index.html, server.py, and all project files
-
 **Files:**
 - `mcp-server/bridge.js` — the HTTP bridge (port 3131)
-- `mcp-server/server.js` — MCP server for Claude Desktop
-- `mcp-server/.env` — API key + TIMELINE_PATH (not in git)
 - `dev.html` — the floating 🤖 panel UI
+
+#### **2. MCP Server for Claude Desktop**
+**Location:** `~/Documents/timeline-mcp/`
+
+**Why separate?** macOS sandbox restrictions prevent Claude Desktop from accessing `~/Library/CloudStorage/Dropbox/`. The MCP server files are copied to `~/Documents/` (accessible location) while the project files remain in Dropbox.
+
+**Config:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+```json
+{
+  "timeline-dev-assistant": {
+    "command": "node",
+    "args": ["/Users/sarelroeloffze/Documents/timeline-mcp/server.js"],
+    "env": {
+      "TIMELINE_PATH": "/Users/sarelroeloffze/Library/CloudStorage/Dropbox/AAA Claud/timeline"
+    }
+  }
+}
+```
+
+**Files:**
+- `~/Documents/timeline-mcp/server.js` — MCP server for Claude Desktop
+- `~/Documents/timeline-mcp/.env` — API key + TIMELINE_PATH
+- `~/Documents/timeline-mcp/node_modules/` — dependencies
+
+**MCP Tools Available in Claude Desktop:**
+- `list_project_files` — Lists all files in the timeline project
+- `read_file` — Reads any project file (index.html, etc.)
+- `write_file` — Edits files with auto-git-commit before/after
+- `search_in_files` — Search for text across project files
+- `git_log` — Shows recent git commits
 
 **Do NOT distribute:** dev.html and mcp-server/ stay on local Mac only
 
@@ -1148,6 +1209,12 @@ match /timelines/{timelineId}/{allPaths=**} {
 ---
 
 ## Next Immediate Step
+
+**Completed this session (2026-09-24):**
+- ✅ **MCP Server Setup** — MCP server for Claude Desktop configured and working at `~/Documents/timeline-mcp/`
+- ✅ **Project Cleanup** — Old backend files (`server.py`, `timeline.db`) archived to `~/Desktop/Timeline-Archive-20260924/`
+- ✅ **Dropbox Optimization** — `dist/` folder excluded from Dropbox sync (saves ~370MB cloud storage)
+- ✅ **Documentation Updated** — CLAUDE.md updated to reflect current Firebase architecture and MCP server location
 
 **Firebase Migration Complete (All Phases 1-8)** — App fully cloud-native with automatic sync, offline support, and local backup.
 
