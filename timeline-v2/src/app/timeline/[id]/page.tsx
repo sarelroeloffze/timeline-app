@@ -4,9 +4,12 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/useAuthStore';
 import { useTimelineStore } from '@/lib/stores/useTimelineStore';
-import { loadTimeline, subscribeToTimeline } from '@/lib/firebase/firestore';
+import { loadTimeline, subscribeToTimeline, saveTimeline } from '@/lib/firebase/firestore';
 import { Loading } from '@/components/shared';
 import { MenuBar, Toolbar } from '@/components/layout';
+import { HorizontalView } from '@/components/views';
+import { EventPanel } from '@/components/panels';
+import { AddPersonModal, AddEventModal } from '@/components/modals';
 import type { Timeline } from '@/lib/types';
 
 export default function TimelinePage() {
@@ -74,12 +77,31 @@ export default function TimelinePage() {
     );
   }
 
+  const currentTimeline = useTimelineStore((state) => state.currentTimeline);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [currentView, setCurrentView] = useState('horizontal');
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [showAddPerson, setShowAddPerson] = useState(false);
+  const [showAddEvent, setShowAddEvent] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!currentTimeline) return;
+
+    setSaving(true);
+    try {
+      await saveTimeline(currentTimeline);
+      // Show success feedback
+      setTimeout(() => setSaving(false), 1000);
+    } catch (err) {
+      console.error('Failed to save timeline:', err);
+      alert('Failed to save timeline');
+      setSaving(false);
+    }
+  };
 
   const handleMenuAction = (action: string) => {
-    console.log('Menu action:', action);
-
     switch (action) {
       case 'new':
         router.push('/timeline/new');
@@ -88,16 +110,13 @@ export default function TimelinePage() {
         router.push('/');
         break;
       case 'save':
-        // TODO: Implement save
-        alert('Save not yet implemented');
+        handleSave();
         break;
       case 'addPerson':
-        // TODO: Open add person modal
-        alert('Add Person modal not yet implemented');
+        setShowAddPerson(true);
         break;
       case 'addEvent':
-        // TODO: Open add event modal
-        alert('Add Event modal not yet implemented');
+        setShowAddEvent(true);
         break;
       case 'viewHorizontal':
         setCurrentView('horizontal');
@@ -108,7 +127,12 @@ export default function TimelinePage() {
       case 'viewData':
         setCurrentView('data');
         break;
-      // Add more view cases here
+      case 'claude':
+        alert('Claude AI integration coming soon');
+        break;
+      case 'filters':
+        alert('Filter panel coming soon');
+        break;
       default:
         console.log('Unhandled action:', action);
     }
@@ -124,21 +148,55 @@ export default function TimelinePage() {
       />
 
       {/* Main content area */}
-      <div className="flex-1 p-8">
-        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-          <h2 className="text-2xl font-bold mb-4">
-            Current View: {currentView}
-          </h2>
-          <p className="text-gray-400 mb-4">
-            Timeline loaded successfully! View components will be added next.
-          </p>
-          <div className="space-y-2 text-sm text-gray-500">
-            <p>• {currentTimeline?.people.length || 0} people</p>
-            <p>• {currentTimeline?.events.length || 0} events</p>
-            <p>• {currentTimeline?.categories.length || 0} categories</p>
+      <div className="flex-1 flex overflow-hidden">
+        {currentView === 'horizontal' && (
+          <HorizontalView
+            onEventClick={(eventId) => setSelectedEventId(eventId)}
+            onAddEvent={() => setShowAddEvent(true)}
+          />
+        )}
+
+        {currentView !== 'horizontal' && (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <h2 className="text-2xl font-bold mb-2">
+                {currentView.charAt(0).toUpperCase() + currentView.slice(1)} View
+              </h2>
+              <p className="text-gray-400">Coming soon...</p>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Event Panel */}
+        {selectedEventId && (
+          <EventPanel
+            eventId={selectedEventId}
+            onClose={() => setSelectedEventId(null)}
+            onEdit={(eventId) => {
+              // TODO: Open edit event modal
+              alert('Edit event coming soon');
+            }}
+          />
+        )}
       </div>
+
+      {/* Modals */}
+      <AddPersonModal
+        isOpen={showAddPerson}
+        onClose={() => setShowAddPerson(false)}
+      />
+
+      <AddEventModal
+        isOpen={showAddEvent}
+        onClose={() => setShowAddEvent(false)}
+      />
+
+      {/* Save indicator */}
+      {saving && (
+        <div className="fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg">
+          Saving...
+        </div>
+      )}
     </div>
   );
 }

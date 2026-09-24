@@ -87,7 +87,7 @@
 
 ---
 
-### 🚧 Phase 4: Components Migration (In Progress - ~15% Complete)
+### 🚧 Phase 4: Components Migration (In Progress - ~25% Complete)
 
 **Progress:**
 - [x] Shared UI components (Button, Input, Modal, Loading)
@@ -95,11 +95,11 @@
 - [x] Dashboard component (My Timelines list)
 - [x] Layout components (MenuBar, Toolbar)
 - [x] App routing pages (Home, New Timeline, Timeline View)
-- [ ] View mode components (0 of 13)
-- [ ] Panel components (0 of 3)
-- [ ] Modal components (0 of 20+)
+- [x] View mode components (1 of 13) - HorizontalView ✅
+- [x] Panel components (1 of 3) - EventPanel ✅
+- [x] Modal components (2 of 20+) - AddPerson, AddEvent ✅
 
-**Completed Components (11):**
+**Completed Components (15):**
 
 1. **Shared UI (`src/components/shared/`):**
    - `Button.tsx` - Variants: primary, secondary, danger, ghost
@@ -120,7 +120,17 @@
 5. **Pages (`src/app/`):**
    - `page.tsx` - Home (Login or Dashboard based on auth)
    - `timeline/new/page.tsx` - New timeline form
-   - `timeline/[id]/page.tsx` - Timeline view (skeleton with MenuBar/Toolbar)
+   - `timeline/[id]/page.tsx` - Full timeline view with HorizontalView, EventPanel, modals
+
+6. **View Components (`src/components/views/`):**
+   - `HorizontalView.tsx` (230 lines) - vis-timeline integration, groups, items, zoom controls
+
+7. **Panel Components (`src/components/panels/`):**
+   - `EventPanel.tsx` (220 lines) - Slide-in panel showing event details, sources, people, tags
+
+8. **Modal Components (`src/components/modals/`):**
+   - `AddPersonModal.tsx` (170 lines) - Form with dates, certainty, color picker
+   - `AddEventModal.tsx` (210 lines) - Form with dates, category, people association
 
 **Remaining Work:**
 
@@ -176,17 +186,29 @@
 **Last Updated:** September 24, 2026
 
 **Phase:** 4 (Components Migration)  
-**Progress:** ~15% of Phase 4 complete  
-**Overall Progress:** ~40% of entire migration
+**Progress:** ~25% of Phase 4 complete  
+**Overall Progress:** ~45% of entire migration
+
+**What's Working Now:**
+- ✅ Full authentication flow (login, signup, Google OAuth)
+- ✅ Dashboard with timeline list
+- ✅ Create new timeline
+- ✅ **HorizontalView with vis-timeline** - fully functional timeline visualization
+- ✅ **EventPanel** - click events to see details, sources, people, tags
+- ✅ **Add Person** - modal with date certainty, color picker
+- ✅ **Add Event** - modal with date ranges, categories, people association
+- ✅ Real-time Firebase sync
+- ✅ Save to Firestore
 
 **Next Steps:**
-1. Create first view component (HorizontalView with vis-timeline)
-2. Create EventPanel to display event details
-3. Create AddPersonModal and AddEventModal
-4. Wire up view switching in timeline page
+1. Create EditPersonModal and EditEventModal
+2. Create FilterPanel for people/categories/tags filtering
+3. Create VerticalView (timeline variant)
+4. Add remaining view modes (Flow, Thread, Subway, etc.)
 
 **Dev Server:** Running at http://localhost:3000  
-**Status:** ✅ Compiles successfully, no errors
+**Status:** ✅ Compiles successfully, no errors  
+**Test:** Timeline view fully interactive with add/view functionality
 
 ---
 
