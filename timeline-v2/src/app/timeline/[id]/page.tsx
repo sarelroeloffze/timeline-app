@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/useAuthStore';
 import { useTimelineStore } from '@/lib/stores/useTimelineStore';
 import { loadTimeline, subscribeToTimeline, saveTimeline } from '@/lib/firebase/firestore';
@@ -39,6 +39,7 @@ import type { Timeline } from '@/lib/types';
 export default function TimelinePage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const user = useAuthStore((state) => state.user);
   const setTimeline = useTimelineStore((state) => state.setTimeline);
   const categories = useTimelineStore((state) => state.categories);
@@ -47,6 +48,10 @@ export default function TimelinePage() {
   const [error, setError] = useState('');
 
   const timelineId = params.id as string;
+
+  // Read initial view and event from URL
+  const initialView = searchParams.get('view') || 'horizontal';
+  const initialEventId = searchParams.get('event');
 
   useEffect(() => {
     if (!user) {
@@ -105,8 +110,8 @@ export default function TimelinePage() {
   const currentTimeline = useTimelineStore((state) => state.currentTimeline);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [currentView, setCurrentView] = useState('horizontal');
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [currentView, setCurrentView] = useState(initialView);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(initialEventId);
   const [showAddPerson, setShowAddPerson] = useState(false);
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [editPersonId, setEditPersonId] = useState<string | null>(null);
@@ -178,6 +183,36 @@ export default function TimelinePage() {
     setHiddenCategories(new Set());
     setHiddenTags(new Set());
   };
+
+  // Update URL params helper
+  const updateURLParams = (updates: Record<string, string | null>) => {
+    const newParams = new URLSearchParams(searchParams.toString());
+
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null) {
+        newParams.delete(key);
+      } else {
+        newParams.set(key, value);
+      }
+    });
+
+    const newURL = `${window.location.pathname}?${newParams.toString()}`;
+    window.history.replaceState(null, '', newURL);
+  };
+
+  // Sync URL when view changes
+  useEffect(() => {
+    if (!loading && currentView !== initialView) {
+      updateURLParams({ view: currentView });
+    }
+  }, [currentView, loading]);
+
+  // Sync URL when selected event changes
+  useEffect(() => {
+    if (!loading) {
+      updateURLParams({ event: selectedEventId });
+    }
+  }, [selectedEventId, loading]);
 
   const handleSave = async () => {
     if (!currentTimeline) return;
