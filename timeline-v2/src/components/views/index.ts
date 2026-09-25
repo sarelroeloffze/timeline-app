@@ -7,3 +7,4 @@ export * from './MapView';
 export * from './ReportView';
 export * from './SlideView';
 export * from './CanvasView';
+export * from './GanttView';
