@@ -15,3 +15,4 @@ export * from './BgSettingsModal';
 export * from './EraEditorModal';
 export * from './MarkersModal';
 export * from './VersionHistoryModal';
+export * from './APIModal';
