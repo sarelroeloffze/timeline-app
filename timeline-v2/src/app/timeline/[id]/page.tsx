@@ -8,8 +8,31 @@ import { loadTimeline, subscribeToTimeline, saveTimeline } from '@/lib/firebase/
 import { Loading } from '@/components/shared';
 import { MenuBar, Toolbar } from '@/components/layout';
 import { HorizontalView, VerticalView, DataView, FlowView, ThreadView, MapView, ReportView, SlideView, CanvasView, GanttView, TreeView, RadialView, SubwayView } from '@/components/views';
-import { EventPanel, FilterPanel } from '@/components/panels';
-import { AddPersonModal, AddEventModal, EditPersonModal, EditEventModal, HelpModal, ExportModal, ImportCSVModal, GedcomImportModal, PptxExportModal, SettingsModal, ShareModal, CategoryManagerModal } from '@/components/modals';
+import { EventPanel, FilterPanel, LeftSidebar } from '@/components/panels';
+import {
+  AddPersonModal,
+  AddEventModal,
+  EditPersonModal,
+  EditEventModal,
+  HelpModal,
+  ExportModal,
+  ImportCSVModal,
+  GedcomImportModal,
+  PptxExportModal,
+  SettingsModal,
+  ShareModal,
+  CategoryManagerModal,
+  FieldDefsModal,
+  BgSettingsModal,
+  EraEditorModal,
+  MarkersModal,
+  VersionHistoryModal,
+  APIModal,
+  GoogleSheetsModal,
+  WikiImportModal,
+  ExtractModal,
+  NarrativeModal,
+} from '@/components/modals';
 import type { Timeline } from '@/lib/types';
 
 export default function TimelinePage() {
@@ -97,6 +120,18 @@ export default function TimelinePage() {
   const [showSettings, setShowSettings] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [showFieldDefs, setShowFieldDefs] = useState(false);
+  const [showBgSettings, setShowBgSettings] = useState(false);
+  const [showEraEditor, setShowEraEditor] = useState(false);
+  const [showMarkers, setShowMarkers] = useState(false);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [showAPI, setShowAPI] = useState(false);
+  const [showGoogleSheets, setShowGoogleSheets] = useState(false);
+  const [showWikiImport, setShowWikiImport] = useState(false);
+  const [showExtract, setShowExtract] = useState(false);
+  const [showNarrative, setShowNarrative] = useState(false);
+  const [sidebarPanel, setSidebarPanel] = useState<'search' | 'people' | 'places' | 'arcs' | null>(null);
+  const [sidebarPinned, setSidebarPinned] = useState(false);
   const [hiddenPeople, setHiddenPeople] = useState<Set<string>>(new Set());
   const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
   const [hiddenTags, setHiddenTags] = useState<Set<string>>(new Set());
@@ -245,6 +280,36 @@ export default function TimelinePage() {
       case 'manageCategories':
         setShowCategoryManager(true);
         break;
+      case 'manageFields':
+        setShowFieldDefs(true);
+        break;
+      case 'bgSettings':
+        setShowBgSettings(true);
+        break;
+      case 'eraEditor':
+        setShowEraEditor(true);
+        break;
+      case 'markers':
+        setShowMarkers(true);
+        break;
+      case 'versionHistory':
+        setShowVersionHistory(true);
+        break;
+      case 'api':
+        setShowAPI(true);
+        break;
+      case 'googleSheets':
+        setShowGoogleSheets(true);
+        break;
+      case 'wikiImport':
+        setShowWikiImport(true);
+        break;
+      case 'extract':
+        setShowExtract(true);
+        break;
+      case 'narrative':
+        setShowNarrative(true);
+        break;
       default:
         console.log('Unhandled action:', action);
     }
@@ -267,6 +332,14 @@ export default function TimelinePage() {
 
       {/* Main content area */}
       <div className="flex-1 flex overflow-hidden">
+        {/* Left Sidebar */}
+        <LeftSidebar
+          activePanel={sidebarPanel}
+          onChangePanel={setSidebarPanel}
+          isPinned={sidebarPinned}
+          onTogglePin={() => setSidebarPinned(!sidebarPinned)}
+        />
+
         {currentView === 'horizontal' && (
           <HorizontalView
             onEventClick={(eventId) => setSelectedEventId(eventId)}
@@ -450,6 +523,84 @@ export default function TimelinePage() {
         onClose={() => setShowCategoryManager(false)}
         categories={categories}
         onSave={handleSaveCategories}
+      />
+
+      <FieldDefsModal
+        isOpen={showFieldDefs}
+        onClose={() => setShowFieldDefs(false)}
+        fieldDefs={[]}
+        onSave={(fieldDefs) => console.log('Save field defs:', fieldDefs)}
+      />
+
+      <BgSettingsModal
+        isOpen={showBgSettings}
+        onClose={() => setShowBgSettings(false)}
+        bgSettings={{ type: 'solid', color1: '#1f2937' }}
+        onSave={(settings) => console.log('Save bg settings:', settings)}
+      />
+
+      <EraEditorModal
+        isOpen={showEraEditor}
+        onClose={() => setShowEraEditor(false)}
+        eras={[]}
+        onSave={(eras) => console.log('Save eras:', eras)}
+      />
+
+      <MarkersModal
+        isOpen={showMarkers}
+        onClose={() => setShowMarkers(false)}
+        markers={[]}
+        onSave={(markers) => console.log('Save markers:', markers)}
+      />
+
+      <VersionHistoryModal
+        isOpen={showVersionHistory}
+        onClose={() => setShowVersionHistory(false)}
+        versions={[]}
+        onRestore={async (versionId) => console.log('Restore version:', versionId)}
+        onCreateNamed={async (label) => console.log('Create named version:', label)}
+        onLabel={async (versionId, label) => console.log('Label version:', versionId, label)}
+        onDelete={async (versionId) => console.log('Delete version:', versionId)}
+      />
+
+      <APIModal
+        isOpen={showAPI}
+        onClose={() => setShowAPI(false)}
+        apiKeys={[]}
+        webhooks={[]}
+        onCreateKey={async (name) => ({ key: 'tl_sample_key' })}
+        onRevokeKey={async (keyId) => console.log('Revoke key:', keyId)}
+        onCreateWebhook={async (url, secret) => console.log('Create webhook:', url)}
+        onDeleteWebhook={async (webhookId) => console.log('Delete webhook:', webhookId)}
+      />
+
+      <GoogleSheetsModal
+        isOpen={showGoogleSheets}
+        onClose={() => setShowGoogleSheets(false)}
+        onImport={async (url, sheetType, mapping, mode, autoSync) =>
+          console.log('Import sheet:', url, sheetType, mapping, mode, autoSync)
+        }
+      />
+
+      <WikiImportModal
+        isOpen={showWikiImport}
+        onClose={() => setShowWikiImport(false)}
+        onImport={async (people, events) => console.log('Import wiki:', people, events)}
+      />
+
+      <ExtractModal
+        isOpen={showExtract}
+        onClose={() => setShowExtract(false)}
+        onExtract={async (text) => ({ people: [], events: [] })}
+        onImport={async (people, events) => console.log('Import extracted:', people, events)}
+      />
+
+      <NarrativeModal
+        isOpen={showNarrative}
+        onClose={() => setShowNarrative(false)}
+        onGenerate={async (tone, length, focus, language) =>
+          'Sample narrative text generated from timeline...'
+        }
       />
 
       {/* Save indicator */}
