@@ -5,3 +5,4 @@ export * from './EditEventModal';
 export * from './HelpModal';
 export * from './ExportModal';
 export * from './ImportCSVModal';
+export * from './GedcomImportModal';

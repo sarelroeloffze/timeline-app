@@ -9,7 +9,7 @@ import { Loading } from '@/components/shared';
 import { MenuBar, Toolbar } from '@/components/layout';
 import { HorizontalView, VerticalView, DataView } from '@/components/views';
 import { EventPanel, FilterPanel } from '@/components/panels';
-import { AddPersonModal, AddEventModal, EditPersonModal, EditEventModal, HelpModal, ExportModal, ImportCSVModal } from '@/components/modals';
+import { AddPersonModal, AddEventModal, EditPersonModal, EditEventModal, HelpModal, ExportModal, ImportCSVModal, GedcomImportModal } from '@/components/modals';
 import type { Timeline } from '@/lib/types';
 
 export default function TimelinePage() {
@@ -91,6 +91,7 @@ export default function TimelinePage() {
   const [showHelp, setShowHelp] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [showImportCSV, setShowImportCSV] = useState(false);
+  const [showImportGedcom, setShowImportGedcom] = useState(false);
   const [hiddenPeople, setHiddenPeople] = useState<Set<string>>(new Set());
   const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
   const [hiddenTags, setHiddenTags] = useState<Set<string>>(new Set());
@@ -193,6 +194,9 @@ export default function TimelinePage() {
         break;
       case 'importCsv':
         setShowImportCSV(true);
+        break;
+      case 'importGedcom':
+        setShowImportGedcom(true);
         break;
       default:
         console.log('Unhandled action:', action);
@@ -304,6 +308,11 @@ export default function TimelinePage() {
       <ImportCSVModal
         isOpen={showImportCSV}
         onClose={() => setShowImportCSV(false)}
+      />
+
+      <GedcomImportModal
+        isOpen={showImportGedcom}
+        onClose={() => setShowImportGedcom(false)}
       />
 
       {/* Save indicator */}

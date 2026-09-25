@@ -62,6 +62,7 @@ export function MenuBar({ onAction }: MenuBarProps) {
         { label: 'Save', action: 'save', shortcut: '⌘S' },
         { type: 'separator' },
         { label: 'Import CSV...', action: 'importCsv' },
+        { label: 'Import GEDCOM...', action: 'importGedcom' },
         { type: 'separator' },
         { label: 'Export to PNG...', action: 'exportPng' },
         { label: 'Export to PDF...', action: 'exportPdf' },

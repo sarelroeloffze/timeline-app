@@ -87,7 +87,7 @@
 
 ---
 
-### 🚧 Phase 4: Components Migration (In Progress - ~48% Complete)
+### 🚧 Phase 4: Components Migration (In Progress - ~50% Complete)
 
 **Progress:**
 - [x] Shared UI components (Button, Input, Modal, Loading)
@@ -97,9 +97,9 @@
 - [x] App routing pages (Home, New Timeline, Timeline View)
 - [x] View mode components (3 of 13) - Horizontal, Vertical, Data ✅
 - [x] Panel components (2 of 3) - EventPanel, FilterPanel ✅
-- [x] Modal components (7 of 20+) - Add/Edit Person, Add/Edit Event, Help, Export, Import CSV ✅
+- [x] Modal components (8 of 20+) - Add/Edit Person, Add/Edit Event, Help, Export, Import CSV/GEDCOM ✅
 
-**Completed Components (24):**
+**Completed Components (25):**
 
 1. **Shared UI (`src/components/shared/`):**
    - `Button.tsx` - Variants: primary, secondary, danger, ghost
@@ -178,6 +178,13 @@
      - File input with format detection
      - Preview table (first 5 rows)
      - Deduplication by name/title in merge mode
+   - `GedcomImportModal.tsx` (290 lines) - GEDCOM genealogy import
+     - 3-step wizard: Select file → Preview → Complete
+     - Merge/Replace modes
+     - Parses INDI (individuals) and FAM (families) records
+     - Creates people, relationships, and marriage events
+     - Preview stats (people count, relationships, events)
+     - Sample people preview (first 5)
 
 **Remaining Work:**
 
@@ -185,10 +192,10 @@
 
 **Panel Components (3):** EventPanel, FilterPanel, LeftSidebar
 
-**Modal Components (19+):**
+**Modal Components (18+):**
 - Person: ✅ AddPersonModal, ✅ EditPersonModal
 - Event: ✅ AddEventModal, ✅ EditEventModal
-- Data: ✅ ImportCSVModal, GedcomImportModal, GoogleSheetsModal, WikiImportModal, ExtractModal
+- Data: ✅ ImportCSVModal, ✅ GedcomImportModal, GoogleSheetsModal, WikiImportModal, ExtractModal
 - Export: ✅ ExportModal, PptxExportModal, NarrativeModal
 - Settings: CategoryManagerModal, FieldDefsModal, BgSettingsModal, EraEditorModal, MarkersModal
 - Misc: ✅ HelpModal, VersionHistoryModal, ShareModal, APIModal
@@ -233,8 +240,8 @@
 **Last Updated:** September 24, 2026
 
 **Phase:** 4 (Components Migration)  
-**Progress:** ~48% of Phase 4 complete  
-**Overall Progress:** ~60% of entire migration
+**Progress:** ~50% of Phase 4 complete  
+**Overall Progress:** ~62% of entire migration
 
 **What's Working Now:**
 - ✅ Full authentication flow (login, signup, Google OAuth)
@@ -251,15 +258,16 @@
 - ✅ **HelpModal** - Comprehensive 8-section help guide with sidebar navigation
 - ✅ **ExportModal** - PNG/PDF export with scale, orientation, paper size options
 - ✅ **ImportCSVModal** - CSV import for people/events with merge/replace modes, preview, deduplication
+- ✅ **GedcomImportModal** - Genealogy import with family relationships, marriage events, preview stats
 - ✅ Real-time Firebase sync
 - ✅ Save to Firestore
 - ✅ View switching (Horizontal ↔ Vertical ↔ Data)
 - ✅ Export to PNG/PDF from any view
-- ✅ Import from CSV with preview and validation
+- ✅ Import from CSV and GEDCOM with preview and validation
 
 **Next Steps:**
 1. Add remaining view modes (Flow, Thread, Subway, Tree, Radial, Gantt, Slide, Map, Report, Canvas)
-2. Create additional import modals (GEDCOM, Google Sheets, Wikipedia)
+2. Create additional import modals (Google Sheets, Wikipedia, Extract from Text)
 3. Create Settings modal and category manager
 4. Create additional export modals (PPTX, ICS calendar, Narrative)
 
