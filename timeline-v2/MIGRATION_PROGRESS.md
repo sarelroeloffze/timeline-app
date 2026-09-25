@@ -87,7 +87,7 @@
 
 ---
 
-### 🚧 Phase 4: Components Migration (In Progress - ~56% Complete)
+### 🚧 Phase 4: Components Migration (In Progress - ~60% Complete)
 
 **Progress:**
 - [x] Shared UI components (Button, Input, Modal, Loading)
@@ -95,11 +95,11 @@
 - [x] Dashboard component (My Timelines list)
 - [x] Layout components (MenuBar, Toolbar)
 - [x] App routing pages (Home, New Timeline, Timeline View)
-- [x] View mode components (5 of 13) - Horizontal, Vertical, Data, Flow, Thread ✅
+- [x] View mode components (6 of 13) - Horizontal, Vertical, Data, Flow, Thread, Map ✅
 - [x] Panel components (2 of 3) - EventPanel, FilterPanel ✅
 - [x] Modal components (9 of 20+) - Add/Edit Person, Add/Edit Event, Help, Export PNG/PDF/PPTX, Import CSV/GEDCOM ✅
 
-**Completed Components (28):**
+**Completed Components (29):**
 
 1. **Shared UI (`src/components/shared/`):**
    - `Button.tsx` - Variants: primary, secondary, danger, ghost
@@ -156,6 +156,14 @@
      - Zoom controls (50-200%)
      - Category badges and colors
      - Click to open EventPanel
+   - `MapView.tsx` (180 lines) - Geographic map view with Leaflet
+     - OpenStreetMap tile layer
+     - Circle markers for events with coordinates
+     - Colored by category
+     - Hover tooltips with event details
+     - Click markers to open EventPanel
+     - Fit All button to show all markers
+     - Empty state when no events have locations
 
 7. **Panel Components (`src/components/panels/`):**
    - `EventPanel.tsx` (220 lines) - Slide-in panel showing event details, sources, people, tags
@@ -210,7 +218,7 @@
 
 **Remaining Work:**
 
-**View Components (8 remaining of 13):** ✅ HorizontalView, ✅ VerticalView, ✅ FlowView, ✅ ThreadView, SubwayView, TreeView, RadialView, GanttView, SlideView, MapView, ReportView, ✅ DataView, CanvasView
+**View Components (7 remaining of 13):** ✅ HorizontalView, ✅ VerticalView, ✅ FlowView, ✅ ThreadView, SubwayView, TreeView, RadialView, GanttView, SlideView, ✅ MapView, ReportView, ✅ DataView, CanvasView
 
 **Panel Components (3):** EventPanel, FilterPanel, LeftSidebar
 
@@ -262,19 +270,20 @@
 **Last Updated:** September 24, 2026
 
 **Phase:** 4 (Components Migration)  
-**Progress:** ~56% of Phase 4 complete  
-**Overall Progress:** ~68% of entire migration
+**Progress:** ~60% of Phase 4 complete  
+**Overall Progress:** ~70% of entire migration
 
 **What's Working Now:**
 - ✅ Full authentication flow (login, signup, Google OAuth)
 - ✅ Dashboard with timeline list
 - ✅ Create new timeline
-- ✅ **5 View Modes Working:**
+- ✅ **6 View Modes Working:**
   - **HorizontalView** - vis-timeline swimlane layout, zoom, click events
   - **VerticalView** - card timeline with center spine, alternating layout, zoom 50-200%
   - **DataView** - spreadsheet tables for Events/People, inline edit buttons
   - **FlowView** - vertical flow with connector lines, zoom, sort order
   - **ThreadView** - horizontal timeline with events above/below axis, thread lines, greedy layout
+  - **MapView** - Leaflet map with event markers, tooltips, Fit All
 - ✅ **EventPanel** - click events to see details, sources, people, tags
 - ✅ **FilterPanel** - filter by people, categories, tags with search
 - ✅ **Complete CRUD** - Create, Read, Update, Delete for people & events
@@ -286,12 +295,12 @@
 - ✅ **GedcomImportModal** - Genealogy import with family relationships, marriage events, preview stats
 - ✅ Real-time Firebase sync
 - ✅ Save to Firestore
-- ✅ View switching (Horizontal ↔ Vertical ↔ Data ↔ Flow ↔ Thread)
+- ✅ View switching (Horizontal ↔ Vertical ↔ Data ↔ Flow ↔ Thread ↔ Map)
 - ✅ Export to PNG/PDF/PowerPoint from any view
 - ✅ Import from CSV and GEDCOM with preview and validation
 
 **Next Steps:**
-1. Add remaining view modes (Subway, Tree, Radial, Gantt, Slide, Map, Report, Canvas)
+1. Add remaining view modes (Subway, Tree, Radial, Gantt, Slide, Report, Canvas)
 2. Create additional import modals (Google Sheets, Wikipedia, Extract from Text)
 3. Create Settings modal and category manager
 4. Create additional export modals (ICS calendar, Narrative)
