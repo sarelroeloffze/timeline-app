@@ -9,7 +9,7 @@ import { Loading } from '@/components/shared';
 import { MenuBar, Toolbar } from '@/components/layout';
 import { HorizontalView, VerticalView, DataView, FlowView, ThreadView, MapView, ReportView, SlideView, CanvasView, GanttView, TreeView, RadialView, SubwayView } from '@/components/views';
 import { EventPanel, FilterPanel } from '@/components/panels';
-import { AddPersonModal, AddEventModal, EditPersonModal, EditEventModal, HelpModal, ExportModal, ImportCSVModal, GedcomImportModal, PptxExportModal, SettingsModal, ShareModal } from '@/components/modals';
+import { AddPersonModal, AddEventModal, EditPersonModal, EditEventModal, HelpModal, ExportModal, ImportCSVModal, GedcomImportModal, PptxExportModal, SettingsModal, ShareModal, CategoryManagerModal } from '@/components/modals';
 import type { Timeline } from '@/lib/types';
 
 export default function TimelinePage() {
@@ -17,6 +17,7 @@ export default function TimelinePage() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const setTimeline = useTimelineStore((state) => state.setTimeline);
+  const categories = useTimelineStore((state) => state.categories);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -95,6 +96,7 @@ export default function TimelinePage() {
   const [showImportGedcom, setShowImportGedcom] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [hiddenPeople, setHiddenPeople] = useState<Set<string>>(new Set());
   const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
   const [hiddenTags, setHiddenTags] = useState<Set<string>>(new Set());
@@ -240,9 +242,18 @@ export default function TimelinePage() {
       case 'share':
         setShowShare(true);
         break;
+      case 'manageCategories':
+        setShowCategoryManager(true);
+        break;
       default:
         console.log('Unhandled action:', action);
     }
+  };
+
+  const handleSaveCategories = async (newCategories: any[]) => {
+    // Update categories in the timeline store
+    // For now, just close the modal - full implementation would update Firestore
+    console.log('Saving categories:', newCategories);
   };
 
   return (
@@ -432,6 +443,13 @@ export default function TimelinePage() {
       <ShareModal
         isOpen={showShare}
         onClose={() => setShowShare(false)}
+      />
+
+      <CategoryManagerModal
+        isOpen={showCategoryManager}
+        onClose={() => setShowCategoryManager(false)}
+        categories={categories}
+        onSave={handleSaveCategories}
       />
 
       {/* Save indicator */}
