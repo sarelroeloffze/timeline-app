@@ -7,7 +7,7 @@ import { useTimelineStore } from '@/lib/stores/useTimelineStore';
 import { loadTimeline, subscribeToTimeline, saveTimeline } from '@/lib/firebase/firestore';
 import { Loading } from '@/components/shared';
 import { MenuBar, Toolbar } from '@/components/layout';
-import { HorizontalView } from '@/components/views';
+import { HorizontalView, VerticalView, DataView } from '@/components/views';
 import { EventPanel, FilterPanel } from '@/components/panels';
 import { AddPersonModal, AddEventModal, EditPersonModal, EditEventModal } from '@/components/modals';
 import type { Timeline } from '@/lib/types';
@@ -204,7 +204,20 @@ export default function TimelinePage() {
           />
         )}
 
-        {currentView !== 'horizontal' && (
+        {currentView === 'vertical' && (
+          <VerticalView
+            onEventClick={(eventId) => setSelectedEventId(eventId)}
+          />
+        )}
+
+        {currentView === 'data' && (
+          <DataView
+            onEditPerson={(personId) => setEditPersonId(personId)}
+            onEditEvent={(eventId) => setEditEventId(eventId)}
+          />
+        )}
+
+        {currentView !== 'horizontal' && currentView !== 'vertical' && currentView !== 'data' && (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <h2 className="text-2xl font-bold mb-2">

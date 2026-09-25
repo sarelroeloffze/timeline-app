@@ -87,7 +87,7 @@
 
 ---
 
-### 🚧 Phase 4: Components Migration (In Progress - ~35% Complete)
+### 🚧 Phase 4: Components Migration (In Progress - ~42% Complete)
 
 **Progress:**
 - [x] Shared UI components (Button, Input, Modal, Loading)
@@ -95,11 +95,11 @@
 - [x] Dashboard component (My Timelines list)
 - [x] Layout components (MenuBar, Toolbar)
 - [x] App routing pages (Home, New Timeline, Timeline View)
-- [x] View mode components (1 of 13) - HorizontalView ✅
+- [x] View mode components (3 of 13) - Horizontal, Vertical, Data ✅
 - [x] Panel components (2 of 3) - EventPanel, FilterPanel ✅
 - [x] Modal components (4 of 20+) - Add/Edit Person, Add/Edit Event ✅
 
-**Completed Components (19):**
+**Completed Components (21):**
 
 1. **Shared UI (`src/components/shared/`):**
    - `Button.tsx` - Variants: primary, secondary, danger, ghost
@@ -124,6 +124,21 @@
 
 6. **View Components (`src/components/views/`):**
    - `HorizontalView.tsx` (230 lines) - vis-timeline integration, groups, items, zoom controls
+   - `VerticalView.tsx` (200 lines) - Card-based vertical timeline with center spine
+     - Alternating left/right cards
+     - Connecting lines to spine
+     - Date markers on spine
+     - Sort order toggle (oldest/newest)
+     - Zoom controls (50-200%)
+     - Click to open EventPanel
+   - `DataView.tsx` (280 lines) - Spreadsheet/table view
+     - Tabbed interface (Events / People)
+     - Sortable columns
+     - Inline edit buttons
+     - Event count by person
+     - Category badges
+     - Avatar rendering
+     - Empty states
 
 7. **Panel Components (`src/components/panels/`):**
    - `EventPanel.tsx` (220 lines) - Slide-in panel showing event details, sources, people, tags
@@ -197,29 +212,30 @@
 **Last Updated:** September 24, 2026
 
 **Phase:** 4 (Components Migration)  
-**Progress:** ~35% of Phase 4 complete  
-**Overall Progress:** ~50% of entire migration
+**Progress:** ~42% of Phase 4 complete  
+**Overall Progress:** ~55% of entire migration
 
 **What's Working Now:**
 - ✅ Full authentication flow (login, signup, Google OAuth)
 - ✅ Dashboard with timeline list
 - ✅ Create new timeline
-- ✅ **HorizontalView with vis-timeline** - fully functional timeline visualization
+- ✅ **3 View Modes Working:**
+  - **HorizontalView** - vis-timeline swimlane layout, zoom, click events
+  - **VerticalView** - card timeline with center spine, alternating layout, zoom 50-200%
+  - **DataView** - spreadsheet tables for Events/People, inline edit buttons
 - ✅ **EventPanel** - click events to see details, sources, people, tags
-- ✅ **Add Person** - modal with date certainty, color picker
-- ✅ **Add Event** - modal with date ranges, categories, people association
-- ✅ **Edit Person** - pre-filled form, delete with confirmation
-- ✅ **Edit Event** - pre-filled form, delete with confirmation
 - ✅ **FilterPanel** - filter by people, categories, tags with search
+- ✅ **Complete CRUD** - Create, Read, Update, Delete for people & events
+- ✅ **Add/Edit Modals** - Person and Event forms with validation
 - ✅ Real-time Firebase sync
 - ✅ Save to Firestore
-- ✅ **Complete CRUD operations** - Create, Read, Update, Delete for people & events
+- ✅ View switching (Horizontal ↔ Vertical ↔ Data)
 
 **Next Steps:**
-1. Create VerticalView (timeline variant)
-2. Create DataView (spreadsheet/table view)
-3. Add remaining view modes (Flow, Thread, Subway, Tree, Radial, etc.)
-4. Create remaining modals (Help, Settings, Export, Import, etc.)
+1. Add remaining view modes (Flow, Thread, Subway, Tree, Radial, Gantt, Slide, Map, Report)
+2. Create Help modal
+3. Create Export modals (PNG, PDF, PPTX)
+4. Create Import modals (CSV, GEDCOM)
 
 **Dev Server:** Running at http://localhost:3000  
 **Status:** ✅ Compiles successfully, no errors  
