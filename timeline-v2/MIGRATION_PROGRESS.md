@@ -87,7 +87,7 @@
 
 ---
 
-### 🚧 Phase 4: Components Migration (In Progress - ~68% Complete)
+### 🚧 Phase 4: Components Migration (In Progress - ~72% Complete)
 
 **Progress:**
 - [x] Shared UI components (Button, Input, Modal, Loading)
@@ -95,11 +95,11 @@
 - [x] Dashboard component (My Timelines list)
 - [x] Layout components (MenuBar, Toolbar)
 - [x] App routing pages (Home, New Timeline, Timeline View)
-- [x] View mode components (8 of 13) - Horizontal, Vertical, Data, Flow, Thread, Map, Report, Slide ✅
+- [x] View mode components (9 of 13) - Horizontal, Vertical, Data, Flow, Thread, Map, Report, Slide, Canvas ✅
 - [x] Panel components (2 of 3) - EventPanel, FilterPanel ✅
 - [x] Modal components (9 of 20+) - Add/Edit Person, Add/Edit Event, Help, Export PNG/PDF/PPTX, Import CSV/GEDCOM ✅
 
-**Completed Components (31):**
+**Completed Components (32):**
 
 1. **Shared UI (`src/components/shared/`):**
    - `Button.tsx` - Variants: primary, secondary, danger, ghost
@@ -180,6 +180,13 @@
      - Thumbnail strip at bottom
      - Current slide counter
      - Click event to open EventPanel
+   - `CanvasView.tsx` (170 lines) - Printable canvas/artboard
+     - Multiple paper size presets (A4, A3, Letter, Poster, Banner)
+     - Mouse drag panning
+     - Zoom controls (25-200%)
+     - Print button with print-optimized CSS
+     - White artboard on dark background
+     - Timeline name and size display
 
 7. **Panel Components (`src/components/panels/`):**
    - `EventPanel.tsx` (220 lines) - Slide-in panel showing event details, sources, people, tags
@@ -234,7 +241,7 @@
 
 **Remaining Work:**
 
-**View Components (5 remaining of 13):** ✅ HorizontalView, ✅ VerticalView, ✅ FlowView, ✅ ThreadView, SubwayView, TreeView, RadialView, GanttView, ✅ SlideView, ✅ MapView, ✅ ReportView, ✅ DataView, CanvasView
+**View Components (4 remaining of 13):** ✅ HorizontalView, ✅ VerticalView, ✅ FlowView, ✅ ThreadView, SubwayView, TreeView, RadialView, GanttView, ✅ SlideView, ✅ MapView, ✅ ReportView, ✅ DataView, ✅ CanvasView
 
 **Panel Components (3):** EventPanel, FilterPanel, LeftSidebar
 
@@ -286,14 +293,14 @@
 **Last Updated:** September 24, 2026
 
 **Phase:** 4 (Components Migration)  
-**Progress:** ~68% of Phase 4 complete  
-**Overall Progress:** ~74% of entire migration
+**Progress:** ~72% of Phase 4 complete  
+**Overall Progress:** ~76% of entire migration
 
 **What's Working Now:**
 - ✅ Full authentication flow (login, signup, Google OAuth)
 - ✅ Dashboard with timeline list
 - ✅ Create new timeline
-- ✅ **8 View Modes Working:**
+- ✅ **9 View Modes Working:**
   - **HorizontalView** - vis-timeline swimlane layout, zoom, click events
   - **VerticalView** - card timeline with center spine, alternating layout, zoom 50-200%
   - **DataView** - spreadsheet tables for Events/People, inline edit buttons
@@ -302,6 +309,7 @@
   - **MapView** - Leaflet map with event markers, tooltips, Fit All
   - **ReportView** - detailed list/report with sorting, grouping, full event cards
   - **SlideView** - presentation slideshow with keyboard navigation, thumbnails
+  - **CanvasView** - printable artboard with paper sizes, zoom, pan
 - ✅ **EventPanel** - click events to see details, sources, people, tags
 - ✅ **FilterPanel** - filter by people, categories, tags with search
 - ✅ **Complete CRUD** - Create, Read, Update, Delete for people & events
@@ -313,12 +321,12 @@
 - ✅ **GedcomImportModal** - Genealogy import with family relationships, marriage events, preview stats
 - ✅ Real-time Firebase sync
 - ✅ Save to Firestore
-- ✅ View switching (Horizontal ↔ Vertical ↔ Data ↔ Flow ↔ Thread ↔ Map ↔ Report ↔ Slide)
+- ✅ View switching (Horizontal ↔ Vertical ↔ Data ↔ Flow ↔ Thread ↔ Map ↔ Report ↔ Slide ↔ Canvas)
 - ✅ Export to PNG/PDF/PowerPoint from any view
 - ✅ Import from CSV and GEDCOM with preview and validation
 
 **Next Steps:**
-1. Add remaining view modes (Subway, Tree, Radial, Gantt, Canvas)
+1. Add remaining view modes (Subway, Tree, Radial, Gantt)
 2. Create additional import modals (Google Sheets, Wikipedia, Extract from Text)
 3. Create Settings modal and category manager
 4. Create additional export modals (ICS calendar, Narrative)
