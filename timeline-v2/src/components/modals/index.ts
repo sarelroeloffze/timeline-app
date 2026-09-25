@@ -16,3 +16,4 @@ export * from './EraEditorModal';
 export * from './MarkersModal';
 export * from './VersionHistoryModal';
 export * from './APIModal';
+export * from './GoogleSheetsModal';
