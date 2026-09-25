@@ -7,7 +7,7 @@ import { useTimelineStore } from '@/lib/stores/useTimelineStore';
 import { loadTimeline, subscribeToTimeline, saveTimeline } from '@/lib/firebase/firestore';
 import { Loading } from '@/components/shared';
 import { MenuBar, Toolbar } from '@/components/layout';
-import { HorizontalView, VerticalView, DataView } from '@/components/views';
+import { HorizontalView, VerticalView, DataView, FlowView } from '@/components/views';
 import { EventPanel, FilterPanel } from '@/components/panels';
 import { AddPersonModal, AddEventModal, EditPersonModal, EditEventModal, HelpModal, ExportModal, ImportCSVModal, GedcomImportModal, PptxExportModal } from '@/components/modals';
 import type { Timeline } from '@/lib/types';
@@ -180,6 +180,9 @@ export default function TimelinePage() {
       case 'viewData':
         setCurrentView('data');
         break;
+      case 'viewFlow':
+        setCurrentView('flow');
+        break;
       case 'claude':
         alert('Claude AI integration coming soon');
         break;
@@ -238,7 +241,13 @@ export default function TimelinePage() {
           />
         )}
 
-        {currentView !== 'horizontal' && currentView !== 'vertical' && currentView !== 'data' && (
+        {currentView === 'flow' && (
+          <FlowView
+            onEventClick={(eventId) => setSelectedEventId(eventId)}
+          />
+        )}
+
+        {currentView !== 'horizontal' && currentView !== 'vertical' && currentView !== 'data' && currentView !== 'flow' && (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <h2 className="text-2xl font-bold mb-2">

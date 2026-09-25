@@ -95,11 +95,11 @@
 - [x] Dashboard component (My Timelines list)
 - [x] Layout components (MenuBar, Toolbar)
 - [x] App routing pages (Home, New Timeline, Timeline View)
-- [x] View mode components (3 of 13) - Horizontal, Vertical, Data ✅
+- [x] View mode components (4 of 13) - Horizontal, Vertical, Data, Flow ✅
 - [x] Panel components (2 of 3) - EventPanel, FilterPanel ✅
 - [x] Modal components (9 of 20+) - Add/Edit Person, Add/Edit Event, Help, Export PNG/PDF/PPTX, Import CSV/GEDCOM ✅
 
-**Completed Components (26):**
+**Completed Components (27):**
 
 1. **Shared UI (`src/components/shared/`):**
    - `Button.tsx` - Variants: primary, secondary, danger, ghost
@@ -139,6 +139,14 @@
      - Category badges
      - Avatar rendering
      - Empty states
+   - `FlowView.tsx` (220 lines) - Vertical flow timeline
+     - Chronological card flow with connector lines
+     - Sort order toggle (oldest/newest)
+     - Zoom controls (50-200%)
+     - Category badges and colors
+     - People chips with avatars
+     - Tag display
+     - Click to open EventPanel
 
 7. **Panel Components (`src/components/panels/`):**
    - `EventPanel.tsx` (220 lines) - Slide-in panel showing event details, sources, people, tags
@@ -193,7 +201,7 @@
 
 **Remaining Work:**
 
-**View Components (13):** HorizontalView, VerticalView, FlowView, ThreadView, SubwayView, TreeView, RadialView, GanttView, SlideView, MapView, ReportView, DataView, CanvasView
+**View Components (9 remaining of 13):** ✅ HorizontalView, ✅ VerticalView, ✅ FlowView, ThreadView, SubwayView, TreeView, RadialView, GanttView, SlideView, MapView, ReportView, ✅ DataView, CanvasView
 
 **Panel Components (3):** EventPanel, FilterPanel, LeftSidebar
 
@@ -245,17 +253,18 @@
 **Last Updated:** September 24, 2026
 
 **Phase:** 4 (Components Migration)  
-**Progress:** ~52% of Phase 4 complete  
-**Overall Progress:** ~64% of entire migration
+**Progress:** ~54% of Phase 4 complete  
+**Overall Progress:** ~66% of entire migration
 
 **What's Working Now:**
 - ✅ Full authentication flow (login, signup, Google OAuth)
 - ✅ Dashboard with timeline list
 - ✅ Create new timeline
-- ✅ **3 View Modes Working:**
+- ✅ **4 View Modes Working:**
   - **HorizontalView** - vis-timeline swimlane layout, zoom, click events
   - **VerticalView** - card timeline with center spine, alternating layout, zoom 50-200%
   - **DataView** - spreadsheet tables for Events/People, inline edit buttons
+  - **FlowView** - vertical flow with connector lines, zoom, sort order
 - ✅ **EventPanel** - click events to see details, sources, people, tags
 - ✅ **FilterPanel** - filter by people, categories, tags with search
 - ✅ **Complete CRUD** - Create, Read, Update, Delete for people & events
