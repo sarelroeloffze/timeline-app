@@ -13,3 +13,4 @@ export * from './CategoryManagerModal';
 export * from './FieldDefsModal';
 export * from './BgSettingsModal';
 export * from './EraEditorModal';
+export * from './MarkersModal';
