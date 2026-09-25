@@ -9,7 +9,7 @@ import { Loading } from '@/components/shared';
 import { MenuBar, Toolbar } from '@/components/layout';
 import { HorizontalView, VerticalView, DataView } from '@/components/views';
 import { EventPanel, FilterPanel } from '@/components/panels';
-import { AddPersonModal, AddEventModal, EditPersonModal, EditEventModal } from '@/components/modals';
+import { AddPersonModal, AddEventModal, EditPersonModal, EditEventModal, HelpModal, ExportModal } from '@/components/modals';
 import type { Timeline } from '@/lib/types';
 
 export default function TimelinePage() {
@@ -88,6 +88,8 @@ export default function TimelinePage() {
   const [editEventId, setEditEventId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const [showExport, setShowExport] = useState(false);
   const [hiddenPeople, setHiddenPeople] = useState<Set<string>>(new Set());
   const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
   const [hiddenTags, setHiddenTags] = useState<Set<string>>(new Set());
@@ -180,6 +182,13 @@ export default function TimelinePage() {
         break;
       case 'filters':
         setShowFilters(true);
+        break;
+      case 'help':
+        setShowHelp(true);
+        break;
+      case 'exportPng':
+      case 'exportPdf':
+        setShowExport(true);
         break;
       default:
         console.log('Unhandled action:', action);
@@ -275,6 +284,17 @@ export default function TimelinePage() {
         eventId={editEventId}
         isOpen={!!editEventId}
         onClose={() => setEditEventId(null)}
+      />
+
+      <HelpModal
+        isOpen={showHelp}
+        onClose={() => setShowHelp(false)}
+      />
+
+      <ExportModal
+        isOpen={showExport}
+        onClose={() => setShowExport(false)}
+        currentView={currentView}
       />
 
       {/* Save indicator */}

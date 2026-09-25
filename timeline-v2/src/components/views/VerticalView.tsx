@@ -26,7 +26,7 @@ export function VerticalView({ onEventClick }: VerticalViewProps) {
   const handleZoomReset = () => setZoom(100);
 
   return (
-    <div className="flex-1 flex flex-col bg-gray-900">
+    <div id="tl-view-vertical" className="flex-1 flex flex-col bg-gray-900">
       {/* Toolbar */}
       <div className="bg-gray-800 border-b border-gray-700 px-4 py-2 flex items-center gap-2">
         <button

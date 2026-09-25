@@ -87,7 +87,7 @@
 
 ---
 
-### 🚧 Phase 4: Components Migration (In Progress - ~42% Complete)
+### 🚧 Phase 4: Components Migration (In Progress - ~46% Complete)
 
 **Progress:**
 - [x] Shared UI components (Button, Input, Modal, Loading)
@@ -97,9 +97,9 @@
 - [x] App routing pages (Home, New Timeline, Timeline View)
 - [x] View mode components (3 of 13) - Horizontal, Vertical, Data ✅
 - [x] Panel components (2 of 3) - EventPanel, FilterPanel ✅
-- [x] Modal components (4 of 20+) - Add/Edit Person, Add/Edit Event ✅
+- [x] Modal components (6 of 20+) - Add/Edit Person, Add/Edit Event, Help, Export ✅
 
-**Completed Components (21):**
+**Completed Components (23):**
 
 1. **Shared UI (`src/components/shared/`):**
    - `Button.tsx` - Variants: primary, secondary, danger, ghost
@@ -158,6 +158,20 @@
      - Hidden count badge
      - Clear all filters button
 
+10. **Additional Modals (`src/components/modals/`):**
+   - `HelpModal.tsx` (280 lines) - Comprehensive help guide
+     - 8 sections: Getting Started, People, Events, Views, Filtering, Dates, Save/Sync, Keyboard
+     - Sidebar navigation
+     - Formatted content with headings, lists, paragraphs
+     - GitHub link in footer
+   - `ExportModal.tsx` (200 lines) - PNG/PDF export
+     - Format selector (PNG/PDF)
+     - Filename input
+     - PDF options: orientation, paper size (A4/A3/Letter/Legal)
+     - Render scale slider (1-3×)
+     - Current view detection
+     - Element ID targeting for export
+
 **Remaining Work:**
 
 **View Components (13):** HorizontalView, VerticalView, FlowView, ThreadView, SubwayView, TreeView, RadialView, GanttView, SlideView, MapView, ReportView, DataView, CanvasView
@@ -212,8 +226,8 @@
 **Last Updated:** September 24, 2026
 
 **Phase:** 4 (Components Migration)  
-**Progress:** ~42% of Phase 4 complete  
-**Overall Progress:** ~55% of entire migration
+**Progress:** ~46% of Phase 4 complete  
+**Overall Progress:** ~58% of entire migration
 
 **What's Working Now:**
 - ✅ Full authentication flow (login, signup, Google OAuth)
@@ -227,15 +241,18 @@
 - ✅ **FilterPanel** - filter by people, categories, tags with search
 - ✅ **Complete CRUD** - Create, Read, Update, Delete for people & events
 - ✅ **Add/Edit Modals** - Person and Event forms with validation
+- ✅ **HelpModal** - Comprehensive 8-section help guide with sidebar navigation
+- ✅ **ExportModal** - PNG/PDF export with scale, orientation, paper size options
 - ✅ Real-time Firebase sync
 - ✅ Save to Firestore
 - ✅ View switching (Horizontal ↔ Vertical ↔ Data)
+- ✅ Export to PNG/PDF from any view
 
 **Next Steps:**
 1. Add remaining view modes (Flow, Thread, Subway, Tree, Radial, Gantt, Slide, Map, Report)
-2. Create Help modal
-3. Create Export modals (PNG, PDF, PPTX)
-4. Create Import modals (CSV, GEDCOM)
+2. Create Import modals (CSV, GEDCOM)
+3. Create Settings modal
+4. Create additional export modals (PPTX, ICS calendar)
 
 **Dev Server:** Running at http://localhost:3000  
 **Status:** ✅ Compiles successfully, no errors  
