@@ -18,3 +18,5 @@ export * from './VersionHistoryModal';
 export * from './APIModal';
 export * from './GoogleSheetsModal';
 export * from './WikiImportModal';
+export * from './ExtractModal';
+export * from './NarrativeModal';
