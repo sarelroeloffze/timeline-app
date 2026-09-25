@@ -1,0 +1,35 @@
+{
+  "recommendations": [
+    // Essential
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+
+    // TypeScript
+    "yoavbls.pretty-ts-errors",
+
+    // Tailwind CSS
+    "bradlc.vscode-tailwindcss",
+
+    // React
+    "dsznajder.es7-react-js-snippets",
+
+    // Next.js
+    "PulkitGangwar.nextjs-snippets",
+
+    // Rust (for Tauri)
+    "rust-lang.rust-analyzer",
+    "tauri-apps.tauri-vscode",
+
+    // Git
+    "eamodio.gitlens",
+
+    // Markdown
+    "yzhang.markdown-all-in-one",
+
+    // Utilities
+    "streetsidesoftware.code-spell-checker",
+    "usernamehw.errorlens",
+    "gruntfuggly.todo-tree"
+  ],
+  "unwantedRecommendations": []
+}
