@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/useAuthStore';
 import { useTimelineStore } from '@/lib/stores/useTimelineStore';
 import { loadTimeline, subscribeToTimeline, saveTimeline } from '@/lib/firebase/firestore';
+import { useKeyboardShortcuts } from '@/lib/hooks';
 import { Loading } from '@/components/shared';
 import { MenuBar, Toolbar } from '@/components/layout';
 import { HorizontalView, VerticalView, DataView, FlowView, ThreadView, MapView, ReportView, SlideView, CanvasView, GanttView, TreeView, RadialView, SubwayView } from '@/components/views';
@@ -320,6 +321,46 @@ export default function TimelinePage() {
     // For now, just close the modal - full implementation would update Firestore
     console.log('Saving categories:', newCategories);
   };
+
+  // Keyboard shortcuts
+  const shortcuts = useMemo(
+    () => [
+      // File operations
+      { key: 's', ctrl: true, action: () => handleSave(), description: 'Save timeline' },
+      { key: 'n', ctrl: true, action: () => router.push('/timeline/new'), description: 'New timeline' },
+      { key: 'd', ctrl: true, action: () => router.push('/'), description: 'Go to dashboard' },
+
+      // Add operations
+      { key: 'p', ctrl: true, shift: true, action: () => setShowAddPerson(true), description: 'Add person' },
+      { key: 'e', ctrl: true, shift: true, action: () => setShowAddEvent(true), description: 'Add event' },
+
+      // View switching
+      { key: '1', ctrl: true, action: () => setCurrentView('horizontal'), description: 'Horizontal view' },
+      { key: '2', ctrl: true, action: () => setCurrentView('vertical'), description: 'Vertical view' },
+      { key: '3', ctrl: true, action: () => setCurrentView('data'), description: 'Data view' },
+      { key: '4', ctrl: true, action: () => setCurrentView('flow'), description: 'Flow view' },
+      { key: '5', ctrl: true, action: () => setCurrentView('thread'), description: 'Thread view' },
+      { key: '6', ctrl: true, action: () => setCurrentView('map'), description: 'Map view' },
+      { key: '7', ctrl: true, action: () => setCurrentView('report'), description: 'Report view' },
+      { key: '8', ctrl: true, action: () => setCurrentView('slide'), description: 'Slide view' },
+      { key: '9', ctrl: true, action: () => setCurrentView('canvas'), description: 'Canvas view' },
+
+      // Modals
+      { key: 'f', ctrl: true, action: () => setShowFilters(true), description: 'Open filters' },
+      { key: 'h', ctrl: true, action: () => setShowHelp(true), description: 'Open help' },
+      { key: '/', action: () => setSidebarPanel(sidebarPanel === 'search' ? null : 'search'), description: 'Toggle search' },
+
+      // Close actions
+      { key: 'Escape', action: () => {
+        setSelectedEventId(null);
+        setShowFilters(false);
+        if (!sidebarPinned) setSidebarPanel(null);
+      }, description: 'Close panels' },
+    ],
+    [handleSave, router, sidebarPanel, sidebarPinned]
+  );
+
+  useKeyboardShortcuts({ shortcuts, enabled: !loading && !error });
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
