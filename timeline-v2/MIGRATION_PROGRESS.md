@@ -385,11 +385,14 @@
 
 ---
 
-### ⏳ Phase 5: Routing & Navigation (Not Started)
-- [ ] App Router pages for all views
-- [ ] Navigation between views
-- [ ] Keyboard shortcuts
-- [ ] Modal routing
+### 🚧 Phase 5: Routing & Navigation (In Progress - ~70% Complete)
+- [x] App Router pages for all views - All 13 views wired into timeline/[id]/page.tsx ✅
+- [x] Navigation between views - View switching via currentView state + handleMenuAction ✅
+- [x] Keyboard shortcuts - 19 shortcuts implemented with useKeyboardShortcuts hook ✅
+- [x] Modal routing - All 22 modals wired with state management ✅
+- [ ] URL-based view persistence (query params)
+- [ ] Browser history integration
+- [ ] Deep linking to specific events/people
 
 ---
 
