@@ -8,3 +8,4 @@ export * from './ReportView';
 export * from './SlideView';
 export * from './CanvasView';
 export * from './GanttView';
+export * from './TreeView';
