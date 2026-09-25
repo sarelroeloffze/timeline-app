@@ -87,7 +87,7 @@
 
 ---
 
-### 🚧 Phase 4: Components Migration (In Progress - ~25% Complete)
+### 🚧 Phase 4: Components Migration (In Progress - ~35% Complete)
 
 **Progress:**
 - [x] Shared UI components (Button, Input, Modal, Loading)
@@ -96,10 +96,10 @@
 - [x] Layout components (MenuBar, Toolbar)
 - [x] App routing pages (Home, New Timeline, Timeline View)
 - [x] View mode components (1 of 13) - HorizontalView ✅
-- [x] Panel components (1 of 3) - EventPanel ✅
-- [x] Modal components (2 of 20+) - AddPerson, AddEvent ✅
+- [x] Panel components (2 of 3) - EventPanel, FilterPanel ✅
+- [x] Modal components (4 of 20+) - Add/Edit Person, Add/Edit Event ✅
 
-**Completed Components (15):**
+**Completed Components (19):**
 
 1. **Shared UI (`src/components/shared/`):**
    - `Button.tsx` - Variants: primary, secondary, danger, ghost
@@ -131,6 +131,17 @@
 8. **Modal Components (`src/components/modals/`):**
    - `AddPersonModal.tsx` (170 lines) - Form with dates, certainty, color picker
    - `AddEventModal.tsx` (210 lines) - Form with dates, category, people association
+   - `EditPersonModal.tsx` (220 lines) - Pre-filled form, delete confirmation
+   - `EditEventModal.tsx` (230 lines) - Pre-filled form, delete confirmation
+
+9. **Additional Panels (`src/components/panels/`):**
+   - `FilterPanel.tsx` (260 lines) - Slide-in filter panel
+     - Filter by people (with search when >10)
+     - Filter by categories
+     - Filter by tags
+     - Select all / none buttons
+     - Hidden count badge
+     - Clear all filters button
 
 **Remaining Work:**
 
@@ -186,8 +197,8 @@
 **Last Updated:** September 24, 2026
 
 **Phase:** 4 (Components Migration)  
-**Progress:** ~25% of Phase 4 complete  
-**Overall Progress:** ~45% of entire migration
+**Progress:** ~35% of Phase 4 complete  
+**Overall Progress:** ~50% of entire migration
 
 **What's Working Now:**
 - ✅ Full authentication flow (login, signup, Google OAuth)
@@ -197,14 +208,18 @@
 - ✅ **EventPanel** - click events to see details, sources, people, tags
 - ✅ **Add Person** - modal with date certainty, color picker
 - ✅ **Add Event** - modal with date ranges, categories, people association
+- ✅ **Edit Person** - pre-filled form, delete with confirmation
+- ✅ **Edit Event** - pre-filled form, delete with confirmation
+- ✅ **FilterPanel** - filter by people, categories, tags with search
 - ✅ Real-time Firebase sync
 - ✅ Save to Firestore
+- ✅ **Complete CRUD operations** - Create, Read, Update, Delete for people & events
 
 **Next Steps:**
-1. Create EditPersonModal and EditEventModal
-2. Create FilterPanel for people/categories/tags filtering
-3. Create VerticalView (timeline variant)
-4. Add remaining view modes (Flow, Thread, Subway, etc.)
+1. Create VerticalView (timeline variant)
+2. Create DataView (spreadsheet/table view)
+3. Add remaining view modes (Flow, Thread, Subway, Tree, Radial, etc.)
+4. Create remaining modals (Help, Settings, Export, Import, etc.)
 
 **Dev Server:** Running at http://localhost:3000  
 **Status:** ✅ Compiles successfully, no errors  

@@ -8,8 +8,8 @@ import { loadTimeline, subscribeToTimeline, saveTimeline } from '@/lib/firebase/
 import { Loading } from '@/components/shared';
 import { MenuBar, Toolbar } from '@/components/layout';
 import { HorizontalView } from '@/components/views';
-import { EventPanel } from '@/components/panels';
-import { AddPersonModal, AddEventModal } from '@/components/modals';
+import { EventPanel, FilterPanel } from '@/components/panels';
+import { AddPersonModal, AddEventModal, EditPersonModal, EditEventModal } from '@/components/modals';
 import type { Timeline } from '@/lib/types';
 
 export default function TimelinePage() {
@@ -84,7 +84,55 @@ export default function TimelinePage() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [showAddPerson, setShowAddPerson] = useState(false);
   const [showAddEvent, setShowAddEvent] = useState(false);
+  const [editPersonId, setEditPersonId] = useState<string | null>(null);
+  const [editEventId, setEditEventId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [hiddenPeople, setHiddenPeople] = useState<Set<string>>(new Set());
+  const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
+  const [hiddenTags, setHiddenTags] = useState<Set<string>>(new Set());
+
+  const togglePerson = (personId: string) => {
+    setHiddenPeople((prev) => {
+      const next = new Set(prev);
+      if (next.has(personId)) {
+        next.delete(personId);
+      } else {
+        next.add(personId);
+      }
+      return next;
+    });
+  };
+
+  const toggleCategory = (category: string) => {
+    setHiddenCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return next;
+    });
+  };
+
+  const toggleTag = (tag: string) => {
+    setHiddenTags((prev) => {
+      const next = new Set(prev);
+      if (next.has(tag)) {
+        next.delete(tag);
+      } else {
+        next.add(tag);
+      }
+      return next;
+    });
+  };
+
+  const clearAllFilters = () => {
+    setHiddenPeople(new Set());
+    setHiddenCategories(new Set());
+    setHiddenTags(new Set());
+  };
 
   const handleSave = async () => {
     if (!currentTimeline) return;
@@ -131,7 +179,7 @@ export default function TimelinePage() {
         alert('Claude AI integration coming soon');
         break;
       case 'filters':
-        alert('Filter panel coming soon');
+        setShowFilters(true);
         break;
       default:
         console.log('Unhandled action:', action);
@@ -173,11 +221,24 @@ export default function TimelinePage() {
             eventId={selectedEventId}
             onClose={() => setSelectedEventId(null)}
             onEdit={(eventId) => {
-              // TODO: Open edit event modal
-              alert('Edit event coming soon');
+              setEditEventId(eventId);
+              setSelectedEventId(null);
             }}
           />
         )}
+
+        {/* Filter Panel */}
+        <FilterPanel
+          isOpen={showFilters}
+          onClose={() => setShowFilters(false)}
+          hiddenPeople={hiddenPeople}
+          hiddenCategories={hiddenCategories}
+          hiddenTags={hiddenTags}
+          onTogglePerson={togglePerson}
+          onToggleCategory={toggleCategory}
+          onToggleTag={toggleTag}
+          onClearAll={clearAllFilters}
+        />
       </div>
 
       {/* Modals */}
@@ -189,6 +250,18 @@ export default function TimelinePage() {
       <AddEventModal
         isOpen={showAddEvent}
         onClose={() => setShowAddEvent(false)}
+      />
+
+      <EditPersonModal
+        personId={editPersonId}
+        isOpen={!!editPersonId}
+        onClose={() => setEditPersonId(null)}
+      />
+
+      <EditEventModal
+        eventId={editEventId}
+        isOpen={!!editEventId}
+        onClose={() => setEditEventId(null)}
       />
 
       {/* Save indicator */}
