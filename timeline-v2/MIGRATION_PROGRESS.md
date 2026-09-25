@@ -87,7 +87,7 @@
 
 ---
 
-### 🚧 Phase 4: Components Migration (In Progress - ~84% Complete)
+### 🚧 Phase 4: Components Migration (In Progress - ~90% Complete)
 
 **Progress:**
 - [x] Shared UI components (Button, Input, Modal, Loading)
@@ -98,7 +98,7 @@
 - [x] View mode components (13 of 13) - ALL COMPLETE ✅✅✅
   - Horizontal, Vertical, Data, Flow, Thread, Map, Report, Slide, Canvas, Gantt, Tree, Radial, Subway
 - [x] Panel components (2 of 3) - EventPanel, FilterPanel ✅
-- [x] Modal components (9 of 20+) - Add/Edit Person, Add/Edit Event, Help, Export PNG/PDF/PPTX, Import CSV/GEDCOM ✅
+- [x] Modal components (16 of 20) - All core modals + Settings/Share/CategoryManager/FieldDefs/BgSettings/EraEditor/Markers ✅
 
 **Completed Components (36):**
 
@@ -269,6 +269,45 @@
      - Theme selector (Match Timeline/Dark/Light)
      - Options for images and sources (Story mode)
      - Toggle switches for include/exclude features
+   - `SettingsModal.tsx` (150 lines) - App preferences
+     - Theme selector (system/light/dark)
+     - Language selector (English/Afrikaans/Español/Français)
+     - Auto-save toggle and interval
+     - Show tutorials toggle
+     - Default view selector
+   - `ShareModal.tsx` (193 lines) - Share timeline
+     - Three share methods: link, export, email
+     - Permission levels (view/edit)
+     - Copy link to clipboard
+     - Export as JSON
+     - Email invitation form
+   - `CategoryManagerModal.tsx` (149 lines) - Category CRUD
+     - Add/edit/delete categories
+     - Color picker with 12 presets
+     - Icon emoji input
+     - Delete confirmation when events use category
+   - `FieldDefsModal.tsx` (172 lines) - Custom field definitions
+     - Manage field templates (name and type)
+     - Field types: text, number, boolean, URL
+     - Inline editing
+     - Delete confirmation
+   - `BgSettingsModal.tsx` (228 lines) - Background customization
+     - Three background types: solid, gradient, photo
+     - Color pickers for solid and gradient
+     - 8 gradient direction options
+     - Photo upload with preview
+   - `EraEditorModal.tsx` (316 lines) - Timeline eras/sections
+     - Year range inputs (start/end)
+     - 5 quick-add presets (Ancient through Modern)
+     - Expandable background editor per era
+     - Accent color picker
+     - Background type selector
+   - `MarkersModal.tsx` (306 lines) - Calendar markers
+     - Visibility toggle per marker
+     - Color picker with 12 presets
+     - Line style (solid/dashed/dotted)
+     - Label position (top/bottom)
+     - Built-in "Today" marker
 
 **Remaining Work:**
 
@@ -277,13 +316,13 @@
 
 **Panel Components (3):** EventPanel, FilterPanel, LeftSidebar
 
-**Modal Components (17+):**
+**Modal Components (20 total, 16 complete):**
 - Person: ✅ AddPersonModal, ✅ EditPersonModal
 - Event: ✅ AddEventModal, ✅ EditEventModal
 - Data: ✅ ImportCSVModal, ✅ GedcomImportModal, GoogleSheetsModal, WikiImportModal, ExtractModal
 - Export: ✅ ExportModal (PNG/PDF), ✅ PptxExportModal, NarrativeModal
-- Settings: CategoryManagerModal, FieldDefsModal, BgSettingsModal, EraEditorModal, MarkersModal
-- Misc: ✅ HelpModal, VersionHistoryModal, ShareModal, APIModal
+- Settings: ✅ SettingsModal, ✅ ShareModal, ✅ CategoryManagerModal, ✅ FieldDefsModal, ✅ BgSettingsModal, ✅ EraEditorModal, ✅ MarkersModal
+- Misc: ✅ HelpModal, VersionHistoryModal, APIModal
 
 ---
 
