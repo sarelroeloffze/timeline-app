@@ -11,6 +11,10 @@ interface MenuBarProps {
   onAction: (action: string) => void;
 }
 
+type MenuItem =
+  | { type: 'separator' }
+  | { label: string; action: string; shortcut?: string; disabled?: boolean };
+
 export function MenuBar({ onAction }: MenuBarProps) {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
@@ -49,13 +53,15 @@ export function MenuBar({ onAction }: MenuBarProps) {
     }
   };
 
-  const menus = [
+  const menus: Array<{ name: string; items: MenuItem[] }> = [
     {
       name: 'File',
       items: [
         { label: 'New Timeline', action: 'new', shortcut: '⌘N' },
         { label: 'Open...', action: 'open', shortcut: '⌘O' },
         { label: 'Save', action: 'save', shortcut: '⌘S' },
+        { type: 'separator' },
+        { label: 'Import CSV...', action: 'importCsv' },
         { type: 'separator' },
         { label: 'Export to PNG...', action: 'exportPng' },
         { label: 'Export to PDF...', action: 'exportPdf' },
@@ -130,34 +136,40 @@ export function MenuBar({ onAction }: MenuBarProps) {
 
           {activeMenu === menu.name && (
             <div className="absolute top-full left-0 mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl min-w-[200px] py-1 z-50">
-              {menu.items.map((item, idx) =>
-                item.type === 'separator' ? (
-                  <div key={idx} className="h-px bg-gray-700 my-1" />
-                ) : (
+              {menu.items.map((item, idx) => {
+                if ('type' in item && item.type === 'separator') {
+                  return <div key={idx} className="h-px bg-gray-700 my-1" />;
+                }
+
+                // Type narrowing: item is now definitely a menu action
+                const menuItem = item as { label: string; action: string; shortcut?: string; disabled?: boolean };
+
+                return (
                   <button
                     key={idx}
                     onClick={() => {
-                      if (item.action === 'signOut') {
+                      if (menuItem.action === 'signOut') {
                         handleSignOut();
                       } else {
-                        handleAction(item.action!);
+                        handleAction(menuItem.action);
                       }
                     }}
-                    disabled={item.disabled}
+                    disabled={menuItem.disabled}
                     className={`w-full px-4 py-2 text-left text-sm flex items-center justify-between ${
-                      item.disabled
+                      menuItem.disabled
                         ? 'text-gray-600 cursor-not-allowed'
                         : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                     }`}
                   >
-                    <span>{item.label}</span>
-                    {item.shortcut && (
+                    <span>{menuItem.label}</span>
+                    {menuItem.shortcut && (
                       <span className="text-xs text-gray-500 ml-4">
-                        {item.shortcut}
+                        {menuItem.shortcut}
                       </span>
                     )}
                   </button>
-                )
+                );
+              }
               )}
             </div>
           )}

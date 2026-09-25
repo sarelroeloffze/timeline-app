@@ -80,8 +80,8 @@ export function DataView({ onEditPerson, onEditEvent }: DataViewProps) {
             <tbody>
               {events.map((event, idx) => {
                 const category = categories.find((c) => c.name === event.category);
-                const eventPeople = event.people
-                  ? people.filter((p) => event.people!.includes(p.id))
+                const eventPeople = event.peopleIds
+                  ? people.filter((p) => event.peopleIds!.includes(p.id))
                   : [];
 
                 return (
@@ -183,7 +183,7 @@ export function DataView({ onEditPerson, onEditEvent }: DataViewProps) {
             <tbody>
               {people.map((person, idx) => {
                 const personEvents = events.filter((e) =>
-                  e.people?.includes(person.id)
+                  e.peopleIds?.includes(person.id)
                 );
 
                 return (

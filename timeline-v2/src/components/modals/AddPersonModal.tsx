@@ -77,8 +77,9 @@ export function AddPersonModal({ isOpen, onClose }: AddPersonModalProps) {
       deathCertainty,
       role: role.trim(),
       color,
-      photo: null,
+      photoUrl: '',
       tags: [],
+      visible: true,
     };
 
     addPerson(newPerson);

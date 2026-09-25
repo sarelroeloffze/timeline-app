@@ -55,11 +55,7 @@ export function ExportModal({ isOpen, onClose, currentView }: ExportModalProps) 
       if (format === 'png') {
         await exportToPNG(elementId, `${filename}.png`, scale);
       } else if (format === 'pdf') {
-        await exportToPDF(elementId, `${filename}.pdf`, {
-          orientation,
-          paperSize,
-          scale,
-        });
+        await exportToPDF(elementId, `${filename}.pdf`, orientation, paperSize, scale);
       }
 
       // Success - close modal after brief delay

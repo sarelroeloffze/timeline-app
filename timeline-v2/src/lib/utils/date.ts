@@ -88,8 +88,7 @@ export function fmtDate(
   // Apply certainty prefix/suffix
   if (certainty === 'circa') return `c. ${base}`;
   if (certainty === 'estimated') return `est. ${base}`;
-  if (certainty === 'range-approx') return `~${base}`;
-  return base; // 'exact'
+  return base; // 'exact' or already handled 'unknown'
 }
 
 /**

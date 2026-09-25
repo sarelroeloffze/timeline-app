@@ -27,8 +27,8 @@ export function EventPanel({ eventId, onClose, onEdit }: EventPanelProps) {
   if (!event) return null;
 
   const category = categories.find((c) => c.name === event.category);
-  const eventPeople = event.people
-    ? people.filter((p) => event.people!.includes(p.id))
+  const eventPeople = event.peopleIds
+    ? people.filter((p) => event.peopleIds!.includes(p.id))
     : [];
 
   const dateDisplay = event.date_end && event.date_end !== event.date_start
@@ -170,14 +170,14 @@ export function EventPanel({ eventId, onClose, onEdit }: EventPanelProps) {
                   {source.confidence && (
                     <span
                       className={`inline-block mt-1 px-2 py-0.5 rounded text-xs ${
-                        source.confidence === 'Primary source'
+                        source.confidence === 'primary'
                           ? 'bg-green-500/20 text-green-400'
-                          : source.confidence === 'Secondary source'
+                          : source.confidence === 'secondary'
                           ? 'bg-blue-500/20 text-blue-400'
                           : 'bg-amber-500/20 text-amber-400'
                       }`}
                     >
-                      {source.confidence}
+                      {source.confidence === 'primary' ? 'Primary source' : source.confidence === 'secondary' ? 'Secondary source' : 'Unverified'}
                     </span>
                   )}
                 </div>

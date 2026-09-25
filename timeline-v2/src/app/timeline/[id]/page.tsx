@@ -9,14 +9,14 @@ import { Loading } from '@/components/shared';
 import { MenuBar, Toolbar } from '@/components/layout';
 import { HorizontalView, VerticalView, DataView } from '@/components/views';
 import { EventPanel, FilterPanel } from '@/components/panels';
-import { AddPersonModal, AddEventModal, EditPersonModal, EditEventModal, HelpModal, ExportModal } from '@/components/modals';
+import { AddPersonModal, AddEventModal, EditPersonModal, EditEventModal, HelpModal, ExportModal, ImportCSVModal } from '@/components/modals';
 import type { Timeline } from '@/lib/types';
 
 export default function TimelinePage() {
   const params = useParams();
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
-  const setCurrentTimeline = useTimelineStore((state) => state.setCurrentTimeline);
+  const setTimeline = useTimelineStore((state) => state.setTimeline);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -38,7 +38,7 @@ export default function TimelinePage() {
     // Load initial timeline data
     loadTimeline(timelineId)
       .then((timeline) => {
-        setCurrentTimeline(timeline);
+        setTimeline(timeline);
         setLoading(false);
       })
       .catch((err) => {
@@ -49,11 +49,11 @@ export default function TimelinePage() {
 
     // Subscribe to real-time updates
     const unsubscribe = subscribeToTimeline(timelineId, (timeline) => {
-      setCurrentTimeline(timeline);
+      setTimeline(timeline);
     });
 
     return () => unsubscribe();
-  }, [timelineId, user, router, setCurrentTimeline]);
+  }, [timelineId, user, router, setTimeline]);
 
   if (loading) {
     return <Loading size="lg" fullScreen text="Loading timeline..." />;
@@ -90,6 +90,7 @@ export default function TimelinePage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showExport, setShowExport] = useState(false);
+  const [showImportCSV, setShowImportCSV] = useState(false);
   const [hiddenPeople, setHiddenPeople] = useState<Set<string>>(new Set());
   const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
   const [hiddenTags, setHiddenTags] = useState<Set<string>>(new Set());
@@ -189,6 +190,9 @@ export default function TimelinePage() {
       case 'exportPng':
       case 'exportPdf':
         setShowExport(true);
+        break;
+      case 'importCsv':
+        setShowImportCSV(true);
         break;
       default:
         console.log('Unhandled action:', action);
@@ -295,6 +299,11 @@ export default function TimelinePage() {
         isOpen={showExport}
         onClose={() => setShowExport(false)}
         currentView={currentView}
+      />
+
+      <ImportCSVModal
+        isOpen={showImportCSV}
+        onClose={() => setShowImportCSV(false)}
       />
 
       {/* Save indicator */}

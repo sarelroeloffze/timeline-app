@@ -54,11 +54,12 @@ export function AddEventModal({ isOpen, onClose }: AddEventModalProps) {
 
     let parsedEnd: DateValue | null = null;
     if (endDate.trim()) {
-      parsedEnd = parseDate(endDate.trim());
-      if (!parsedEnd) {
+      const parsed = parseDate(endDate.trim());
+      if (!parsed) {
         setError('Invalid end date format');
         return;
       }
+      parsedEnd = parsed;
     }
 
     const newEvent: Event = {
@@ -70,8 +71,9 @@ export function AddEventModal({ isOpen, onClose }: AddEventModalProps) {
       dateEndCertainty: endCertainty,
       description: description.trim(),
       category: category || (categories[0]?.name || 'Uncategorised'),
-      people: selectedPeople,
+      peopleIds: selectedPeople,
       location: { name: '', lat: null, lon: null },
+      placeId: null,
       tags: [],
       sources: [],
       customFields: [],
@@ -79,8 +81,8 @@ export function AddEventModal({ isOpen, onClose }: AddEventModalProps) {
       status: 'planned',
       progress: 0,
       parentEventId: null,
-      placeId: null,
       recurrence: null,
+      visible: true,
     };
 
     addEvent(newEvent);

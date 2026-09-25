@@ -44,7 +44,7 @@ export function EditEventModal({ eventId, isOpen, onClose }: EditEventModalProps
         setEndCertainty(event.dateEndCertainty || 'exact');
         setDescription(event.description || '');
         setCategory(event.category || '');
-        setSelectedPeople(event.people || []);
+        setSelectedPeople(event.peopleIds || []);
       }
     }
   }, [eventId, isOpen, events]);
@@ -85,11 +85,12 @@ export function EditEventModal({ eventId, isOpen, onClose }: EditEventModalProps
 
     let parsedEnd: DateValue | null = null;
     if (endDate.trim()) {
-      parsedEnd = parseDate(endDate.trim());
-      if (!parsedEnd) {
+      const parsed = parseDate(endDate.trim());
+      if (!parsed) {
         setError('Invalid end date format');
         return;
       }
+      parsedEnd = parsed;
     }
 
     const updates: Partial<Event> = {
@@ -100,7 +101,7 @@ export function EditEventModal({ eventId, isOpen, onClose }: EditEventModalProps
       dateEndCertainty: endCertainty,
       description: description.trim(),
       category: category || (categories[0]?.name || 'Uncategorised'),
-      people: selectedPeople,
+      peopleIds: selectedPeople,
     };
 
     updateEvent(eventId, updates);

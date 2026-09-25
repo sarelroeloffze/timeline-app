@@ -34,9 +34,9 @@ export function HorizontalView({ onEventClick, onAddEvent }: HorizontalViewProps
 
     // Create items from events
     const items = events.flatMap((event) => {
-      if (event.people && event.people.length > 0) {
+      if (event.peopleIds && event.peopleIds.length > 0) {
         // Create one item per associated person
-        return event.people.map((personId) => createVisItem(event, personId));
+        return event.peopleIds.map((personId: string) => createVisItem(event, personId));
       } else {
         // Unassigned event
         return [createVisItem(event, '__unassigned__')];
@@ -48,14 +48,14 @@ export function HorizontalView({ onEventClick, onAddEvent }: HorizontalViewProps
       height: '100%',
       orientation: 'top',
       stack: true,
-      zoomKey: 'ctrlKey',
+      zoomKey: 'ctrlKey' as 'ctrlKey',
       zoomMin: 1000 * 60 * 60 * 24 * 365, // 1 year
       zoomMax: 1000 * 60 * 60 * 24 * 365 * 2100, // 2100 years
       moveable: true,
       zoomable: true,
       tooltip: {
         followMouse: true,
-        overflowMethod: 'cap',
+        overflowMethod: 'cap' as 'cap',
       },
     };
 

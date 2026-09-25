@@ -80,8 +80,8 @@ export function VerticalView({ onEventClick }: VerticalViewProps) {
             <div className="space-y-12">
               {sortedEvents.map((event, idx) => {
                 const category = categories.find((c) => c.name === event.category);
-                const eventPeople = event.people
-                  ? people.filter((p) => event.people!.includes(p.id))
+                const eventPeople = event.peopleIds
+                  ? people.filter((p) => event.peopleIds!.includes(p.id))
                   : [];
 
                 const isLeft = idx % 2 === 0;

@@ -15,16 +15,7 @@ export default function Home() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      if (firebaseUser) {
-        setUser({
-          uid: firebaseUser.uid,
-          email: firebaseUser.email || '',
-          displayName: firebaseUser.displayName || '',
-          photoURL: firebaseUser.photoURL || '',
-        });
-      } else {
-        setUser(null);
-      }
+      setUser(firebaseUser);
       setLoading(false);
     });
 

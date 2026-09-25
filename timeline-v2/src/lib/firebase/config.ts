@@ -22,7 +22,7 @@ export const auth = getAuth(app);
 
 // Enable offline persistence (only in browser)
 if (typeof window !== 'undefined') {
-  enableIndexedDbPersistence(db, { synchronizeTabs: true }).catch((err) => {
+  enableIndexedDbPersistence(db).catch((err) => {
     if (err.code === 'failed-precondition') {
       console.warn('Multiple tabs open, persistence enabled in first tab only');
     } else if (err.code === 'unimplemented') {

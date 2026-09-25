@@ -42,11 +42,13 @@ interface TimelineState {
   clearTimeline: () => void;
 
   // Actions - People
+  setPeople: (people: Person[]) => void;
   addPerson: (person: Person) => void;
   updatePerson: (id: string, updates: Partial<Person>) => void;
   deletePerson: (id: string) => void;
 
   // Actions - Events
+  setEvents: (events: Event[]) => void;
   addEvent: (event: Event) => void;
   updateEvent: (id: string, updates: Partial<Event>) => void;
   deleteEvent: (id: string) => void;
@@ -149,6 +151,8 @@ export const useTimelineStore = create<TimelineState>()(
       }),
 
       // People Actions
+      setPeople: (people) => set({ people }),
+
       addPerson: (person) => set((state) => ({
         people: [...state.people, person],
       })),
@@ -173,6 +177,8 @@ export const useTimelineStore = create<TimelineState>()(
       })),
 
       // Event Actions
+      setEvents: (events) => set({ events }),
+
       addEvent: (event) => set((state) => ({
         events: [...state.events, event],
       })),

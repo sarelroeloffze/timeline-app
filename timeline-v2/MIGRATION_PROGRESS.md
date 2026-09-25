@@ -87,7 +87,7 @@
 
 ---
 
-### 🚧 Phase 4: Components Migration (In Progress - ~46% Complete)
+### 🚧 Phase 4: Components Migration (In Progress - ~48% Complete)
 
 **Progress:**
 - [x] Shared UI components (Button, Input, Modal, Loading)
@@ -97,9 +97,9 @@
 - [x] App routing pages (Home, New Timeline, Timeline View)
 - [x] View mode components (3 of 13) - Horizontal, Vertical, Data ✅
 - [x] Panel components (2 of 3) - EventPanel, FilterPanel ✅
-- [x] Modal components (6 of 20+) - Add/Edit Person, Add/Edit Event, Help, Export ✅
+- [x] Modal components (7 of 20+) - Add/Edit Person, Add/Edit Event, Help, Export, Import CSV ✅
 
-**Completed Components (23):**
+**Completed Components (24):**
 
 1. **Shared UI (`src/components/shared/`):**
    - `Button.tsx` - Variants: primary, secondary, danger, ghost
@@ -171,6 +171,13 @@
      - Render scale slider (1-3×)
      - Current view detection
      - Element ID targeting for export
+   - `ImportCSVModal.tsx` (270 lines) - CSV import
+     - 3-step wizard: Select file → Preview → Complete
+     - Import type selector (Events/People)
+     - Import mode selector (Merge/Replace)
+     - File input with format detection
+     - Preview table (first 5 rows)
+     - Deduplication by name/title in merge mode
 
 **Remaining Work:**
 
@@ -178,13 +185,13 @@
 
 **Panel Components (3):** EventPanel, FilterPanel, LeftSidebar
 
-**Modal Components (20+):**
-- Person: AddPersonModal, EditPersonModal
-- Event: AddEventModal, EditEventModal
-- Data: ImportCSVModal, GedcomImportModal, GoogleSheetsModal, WikiImportModal, ExtractModal
-- Export: ExportModal, PptxExportModal, NarrativeModal
+**Modal Components (19+):**
+- Person: ✅ AddPersonModal, ✅ EditPersonModal
+- Event: ✅ AddEventModal, ✅ EditEventModal
+- Data: ✅ ImportCSVModal, GedcomImportModal, GoogleSheetsModal, WikiImportModal, ExtractModal
+- Export: ✅ ExportModal, PptxExportModal, NarrativeModal
 - Settings: CategoryManagerModal, FieldDefsModal, BgSettingsModal, EraEditorModal, MarkersModal
-- Misc: HelpModal, VersionHistoryModal, ShareModal, APIModal
+- Misc: ✅ HelpModal, VersionHistoryModal, ShareModal, APIModal
 
 ---
 
@@ -226,8 +233,8 @@
 **Last Updated:** September 24, 2026
 
 **Phase:** 4 (Components Migration)  
-**Progress:** ~46% of Phase 4 complete  
-**Overall Progress:** ~58% of entire migration
+**Progress:** ~48% of Phase 4 complete  
+**Overall Progress:** ~60% of entire migration
 
 **What's Working Now:**
 - ✅ Full authentication flow (login, signup, Google OAuth)
@@ -243,16 +250,18 @@
 - ✅ **Add/Edit Modals** - Person and Event forms with validation
 - ✅ **HelpModal** - Comprehensive 8-section help guide with sidebar navigation
 - ✅ **ExportModal** - PNG/PDF export with scale, orientation, paper size options
+- ✅ **ImportCSVModal** - CSV import for people/events with merge/replace modes, preview, deduplication
 - ✅ Real-time Firebase sync
 - ✅ Save to Firestore
 - ✅ View switching (Horizontal ↔ Vertical ↔ Data)
 - ✅ Export to PNG/PDF from any view
+- ✅ Import from CSV with preview and validation
 
 **Next Steps:**
-1. Add remaining view modes (Flow, Thread, Subway, Tree, Radial, Gantt, Slide, Map, Report)
-2. Create Import modals (CSV, GEDCOM)
-3. Create Settings modal
-4. Create additional export modals (PPTX, ICS calendar)
+1. Add remaining view modes (Flow, Thread, Subway, Tree, Radial, Gantt, Slide, Map, Report, Canvas)
+2. Create additional import modals (GEDCOM, Google Sheets, Wikipedia)
+3. Create Settings modal and category manager
+4. Create additional export modals (PPTX, ICS calendar, Narrative)
 
 **Dev Server:** Running at http://localhost:3000  
 **Status:** ✅ Compiles successfully, no errors  

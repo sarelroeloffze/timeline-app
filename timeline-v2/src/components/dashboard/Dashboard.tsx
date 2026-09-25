@@ -40,7 +40,7 @@ export function Dashboard() {
         name: tl.name,
         eventCount: tl.eventCount || 0,
         personCount: tl.personCount || 0,
-        lastModified: tl.lastModified?.toDate() || new Date(),
+        lastModified: tl.updatedAt || new Date(),
         categoryColors: tl.categoryColors || [],
       }));
 
