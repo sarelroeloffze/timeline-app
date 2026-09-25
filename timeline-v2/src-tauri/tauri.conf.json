@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "timeline-v2",
-  "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "productName": "Timeline",
+  "version": "1.0.0",
+  "identifier": "com.timeline.app",
   "build": {
     "frontendDist": "../out",
     "devUrl": "http://localhost:3000",
@@ -12,11 +12,14 @@
   "app": {
     "windows": [
       {
-        "title": "timeline-v2",
-        "width": 800,
-        "height": 600,
+        "title": "Timeline",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 768,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "center": true
       }
     ],
     "security": {
