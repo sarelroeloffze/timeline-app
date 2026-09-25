@@ -8,3 +8,4 @@ export * from './ImportCSVModal';
 export * from './GedcomImportModal';
 export * from './PptxExportModal';
 export * from './SettingsModal';
+export * from './ShareModal';

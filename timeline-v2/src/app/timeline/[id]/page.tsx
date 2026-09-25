@@ -9,7 +9,7 @@ import { Loading } from '@/components/shared';
 import { MenuBar, Toolbar } from '@/components/layout';
 import { HorizontalView, VerticalView, DataView, FlowView, ThreadView, MapView, ReportView, SlideView, CanvasView, GanttView, TreeView, RadialView, SubwayView } from '@/components/views';
 import { EventPanel, FilterPanel } from '@/components/panels';
-import { AddPersonModal, AddEventModal, EditPersonModal, EditEventModal, HelpModal, ExportModal, ImportCSVModal, GedcomImportModal, PptxExportModal, SettingsModal } from '@/components/modals';
+import { AddPersonModal, AddEventModal, EditPersonModal, EditEventModal, HelpModal, ExportModal, ImportCSVModal, GedcomImportModal, PptxExportModal, SettingsModal, ShareModal } from '@/components/modals';
 import type { Timeline } from '@/lib/types';
 
 export default function TimelinePage() {
@@ -94,6 +94,7 @@ export default function TimelinePage() {
   const [showImportCSV, setShowImportCSV] = useState(false);
   const [showImportGedcom, setShowImportGedcom] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   const [hiddenPeople, setHiddenPeople] = useState<Set<string>>(new Set());
   const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
   const [hiddenTags, setHiddenTags] = useState<Set<string>>(new Set());
@@ -235,6 +236,9 @@ export default function TimelinePage() {
         break;
       case 'settings':
         setShowSettings(true);
+        break;
+      case 'share':
+        setShowShare(true);
         break;
       default:
         console.log('Unhandled action:', action);
@@ -423,6 +427,11 @@ export default function TimelinePage() {
       <SettingsModal
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
+      />
+
+      <ShareModal
+        isOpen={showShare}
+        onClose={() => setShowShare(false)}
       />
 
       {/* Save indicator */}
