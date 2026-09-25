@@ -5,7 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/useAuthStore';
 import { useTimelineStore } from '@/lib/stores/useTimelineStore';
 import { loadTimeline, subscribeToTimeline, saveTimeline } from '@/lib/firebase/firestore';
-import { useKeyboardShortcuts } from '@/lib/hooks';
+import { useKeyboardShortcuts, useMenuListener } from '@/lib/hooks';
 import { Loading } from '@/components/shared';
 import { MenuBar, Toolbar } from '@/components/layout';
 import { HorizontalView, VerticalView, DataView, FlowView, ThreadView, MapView, ReportView, SlideView, CanvasView, GanttView, TreeView, RadialView, SubwayView } from '@/components/views';
@@ -396,6 +396,7 @@ export default function TimelinePage() {
   );
 
   useKeyboardShortcuts({ shortcuts, enabled: !loading && !error });
+  useMenuListener(handleMenuAction);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col">
