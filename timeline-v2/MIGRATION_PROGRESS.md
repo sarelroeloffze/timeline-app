@@ -87,7 +87,7 @@
 
 ---
 
-### 🚧 Phase 4: Components Migration (In Progress - ~76% Complete)
+### 🚧 Phase 4: Components Migration (In Progress - ~84% Complete)
 
 **Progress:**
 - [x] Shared UI components (Button, Input, Modal, Loading)
@@ -95,11 +95,12 @@
 - [x] Dashboard component (My Timelines list)
 - [x] Layout components (MenuBar, Toolbar)
 - [x] App routing pages (Home, New Timeline, Timeline View)
-- [x] View mode components (10 of 13) - Horizontal, Vertical, Data, Flow, Thread, Map, Report, Slide, Canvas, Gantt ✅
+- [x] View mode components (13 of 13) - ALL COMPLETE ✅✅✅
+  - Horizontal, Vertical, Data, Flow, Thread, Map, Report, Slide, Canvas, Gantt, Tree, Radial, Subway
 - [x] Panel components (2 of 3) - EventPanel, FilterPanel ✅
 - [x] Modal components (9 of 20+) - Add/Edit Person, Add/Edit Event, Help, Export PNG/PDF/PPTX, Import CSV/GEDCOM ✅
 
-**Completed Components (33):**
+**Completed Components (36):**
 
 1. **Shared UI (`src/components/shared/`):**
    - `Button.tsx` - Variants: primary, secondary, danger, ghost
@@ -195,6 +196,28 @@
      - Zoom controls (50-200%)
      - Click bars to open EventPanel
      - Label column with person avatars
+   - `TreeView.tsx` (190 lines) - Family tree visualization
+     - SVG node layout with people as cards
+     - Avatars and names with birth dates
+     - Event count badges per person
+     - Vertical/Horizontal layout toggle
+     - Zoom controls (50-200%)
+     - Click nodes to edit person
+   - `RadialView.tsx` (220 lines) - Circular/wheel chart
+     - Events arranged in circular segments
+     - Inner ring shows categories
+     - Outer ring shows individual events
+     - Category-colored segments
+     - Zoom controls (50-200%)
+     - Click segments to open EventPanel
+     - SVG arc path rendering
+   - `SubwayView.tsx` (170 lines) - Metro map style
+     - Horizontal person tracks (lines)
+     - Events as stops on tracks
+     - Category-colored stop circles
+     - Date axis at bottom with grid lines
+     - Zoom controls (50-200%)
+     - Click stops to open EventPanel
 
 7. **Panel Components (`src/components/panels/`):**
    - `EventPanel.tsx` (220 lines) - Slide-in panel showing event details, sources, people, tags
@@ -249,7 +272,8 @@
 
 **Remaining Work:**
 
-**View Components (3 remaining of 13):** ✅ HorizontalView, ✅ VerticalView, ✅ FlowView, ✅ ThreadView, SubwayView, TreeView, RadialView, ✅ GanttView, ✅ SlideView, ✅ MapView, ✅ ReportView, ✅ DataView, ✅ CanvasView
+**View Components (0 remaining of 13):** ✅ ALL 13 VIEWS COMPLETE! 
+- ✅ HorizontalView, ✅ VerticalView, ✅ DataView, ✅ FlowView, ✅ ThreadView, ✅ MapView, ✅ ReportView, ✅ SlideView, ✅ CanvasView, ✅ GanttView, ✅ TreeView, ✅ RadialView, ✅ SubwayView
 
 **Panel Components (3):** EventPanel, FilterPanel, LeftSidebar
 
@@ -301,14 +325,14 @@
 **Last Updated:** September 24, 2026
 
 **Phase:** 4 (Components Migration)  
-**Progress:** ~76% of Phase 4 complete  
-**Overall Progress:** ~78% of entire migration
+**Progress:** ~84% of Phase 4 complete  
+**Overall Progress:** ~82% of entire migration
 
 **What's Working Now:**
 - ✅ Full authentication flow (login, signup, Google OAuth)
 - ✅ Dashboard with timeline list
 - ✅ Create new timeline
-- ✅ **10 View Modes Working:**
+- ✅ **ALL 13 View Modes Complete:**
   - **HorizontalView** - vis-timeline swimlane layout, zoom, click events
   - **VerticalView** - card timeline with center spine, alternating layout, zoom 50-200%
   - **DataView** - spreadsheet tables for Events/People, inline edit buttons
@@ -319,6 +343,9 @@
   - **SlideView** - presentation slideshow with keyboard navigation, thumbnails
   - **CanvasView** - printable artboard with paper sizes, zoom, pan
   - **GanttView** - project Gantt chart grouped by person, date axis, colored bars
+  - **TreeView** - family tree with SVG nodes, avatars, birth dates, event counts
+  - **RadialView** - circular wheel chart with category inner ring, event outer ring
+  - **SubwayView** - metro map with person tracks, event stops, date axis
 - ✅ **EventPanel** - click events to see details, sources, people, tags
 - ✅ **FilterPanel** - filter by people, categories, tags with search
 - ✅ **Complete CRUD** - Create, Read, Update, Delete for people & events
@@ -330,12 +357,12 @@
 - ✅ **GedcomImportModal** - Genealogy import with family relationships, marriage events, preview stats
 - ✅ Real-time Firebase sync
 - ✅ Save to Firestore
-- ✅ View switching (Horizontal ↔ Vertical ↔ Data ↔ Flow ↔ Thread ↔ Map ↔ Report ↔ Slide ↔ Canvas ↔ Gantt)
+- ✅ **All 13 view modes complete** (Horizontal, Vertical, Data, Flow, Thread, Map, Report, Slide, Canvas, Gantt, Tree, Radial, Subway)
 - ✅ Export to PNG/PDF/PowerPoint from any view
 - ✅ Import from CSV and GEDCOM with preview and validation
 
 **Next Steps:**
-1. Add remaining view modes (Subway, Tree, Radial)
+1. Create remaining modals (Google Sheets, Wikipedia, Extract, Settings, Share, API, etc.)
 2. Create additional import modals (Google Sheets, Wikipedia, Extract from Text)
 3. Create Settings modal and category manager
 4. Create additional export modals (ICS calendar, Narrative)

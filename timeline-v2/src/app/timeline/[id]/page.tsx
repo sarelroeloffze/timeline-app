@@ -7,7 +7,7 @@ import { useTimelineStore } from '@/lib/stores/useTimelineStore';
 import { loadTimeline, subscribeToTimeline, saveTimeline } from '@/lib/firebase/firestore';
 import { Loading } from '@/components/shared';
 import { MenuBar, Toolbar } from '@/components/layout';
-import { HorizontalView, VerticalView, DataView, FlowView, ThreadView, MapView, ReportView, SlideView, CanvasView, GanttView, TreeView } from '@/components/views';
+import { HorizontalView, VerticalView, DataView, FlowView, ThreadView, MapView, ReportView, SlideView, CanvasView, GanttView, TreeView, RadialView, SubwayView } from '@/components/views';
 import { EventPanel, FilterPanel } from '@/components/panels';
 import { AddPersonModal, AddEventModal, EditPersonModal, EditEventModal, HelpModal, ExportModal, ImportCSVModal, GedcomImportModal, PptxExportModal } from '@/components/modals';
 import type { Timeline } from '@/lib/types';
@@ -204,6 +204,12 @@ export default function TimelinePage() {
       case 'viewTree':
         setCurrentView('tree');
         break;
+      case 'viewRadial':
+        setCurrentView('radial');
+        break;
+      case 'viewSubway':
+        setCurrentView('subway');
+        break;
       case 'claude':
         alert('Claude AI integration coming soon');
         break;
@@ -311,7 +317,19 @@ export default function TimelinePage() {
           />
         )}
 
-        {currentView !== 'horizontal' && currentView !== 'vertical' && currentView !== 'data' && currentView !== 'flow' && currentView !== 'thread' && currentView !== 'map' && currentView !== 'report' && currentView !== 'slide' && currentView !== 'canvas' && currentView !== 'gantt' && currentView !== 'tree' && (
+        {currentView === 'radial' && (
+          <RadialView
+            onEventClick={(eventId) => setSelectedEventId(eventId)}
+          />
+        )}
+
+        {currentView === 'subway' && (
+          <SubwayView
+            onEventClick={(eventId) => setSelectedEventId(eventId)}
+          />
+        )}
+
+        {currentView !== 'horizontal' && currentView !== 'vertical' && currentView !== 'data' && currentView !== 'flow' && currentView !== 'thread' && currentView !== 'map' && currentView !== 'report' && currentView !== 'slide' && currentView !== 'canvas' && currentView !== 'gantt' && currentView !== 'tree' && currentView !== 'radial' && currentView !== 'subway' && (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <h2 className="text-2xl font-bold mb-2">

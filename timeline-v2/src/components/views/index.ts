@@ -9,3 +9,5 @@ export * from './SlideView';
 export * from './CanvasView';
 export * from './GanttView';
 export * from './TreeView';
+export * from './RadialView';
+export * from './SubwayView';
