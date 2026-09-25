@@ -87,7 +87,7 @@
 
 ---
 
-### 🚧 Phase 4: Components Migration (In Progress - ~50% Complete)
+### 🚧 Phase 4: Components Migration (In Progress - ~52% Complete)
 
 **Progress:**
 - [x] Shared UI components (Button, Input, Modal, Loading)
@@ -97,9 +97,9 @@
 - [x] App routing pages (Home, New Timeline, Timeline View)
 - [x] View mode components (3 of 13) - Horizontal, Vertical, Data ✅
 - [x] Panel components (2 of 3) - EventPanel, FilterPanel ✅
-- [x] Modal components (8 of 20+) - Add/Edit Person, Add/Edit Event, Help, Export, Import CSV/GEDCOM ✅
+- [x] Modal components (9 of 20+) - Add/Edit Person, Add/Edit Event, Help, Export PNG/PDF/PPTX, Import CSV/GEDCOM ✅
 
-**Completed Components (25):**
+**Completed Components (26):**
 
 1. **Shared UI (`src/components/shared/`):**
    - `Button.tsx` - Variants: primary, secondary, danger, ghost
@@ -185,6 +185,11 @@
      - Creates people, relationships, and marriage events
      - Preview stats (people count, relationships, events)
      - Sample people preview (first 5)
+   - `PptxExportModal.tsx` (230 lines) - PowerPoint export
+     - Two modes: Timeline Slide (single slide) or Story Slides (one per event)
+     - Theme selector (Match Timeline/Dark/Light)
+     - Options for images and sources (Story mode)
+     - Toggle switches for include/exclude features
 
 **Remaining Work:**
 
@@ -192,11 +197,11 @@
 
 **Panel Components (3):** EventPanel, FilterPanel, LeftSidebar
 
-**Modal Components (18+):**
+**Modal Components (17+):**
 - Person: ✅ AddPersonModal, ✅ EditPersonModal
 - Event: ✅ AddEventModal, ✅ EditEventModal
 - Data: ✅ ImportCSVModal, ✅ GedcomImportModal, GoogleSheetsModal, WikiImportModal, ExtractModal
-- Export: ✅ ExportModal, PptxExportModal, NarrativeModal
+- Export: ✅ ExportModal (PNG/PDF), ✅ PptxExportModal, NarrativeModal
 - Settings: CategoryManagerModal, FieldDefsModal, BgSettingsModal, EraEditorModal, MarkersModal
 - Misc: ✅ HelpModal, VersionHistoryModal, ShareModal, APIModal
 
@@ -240,8 +245,8 @@
 **Last Updated:** September 24, 2026
 
 **Phase:** 4 (Components Migration)  
-**Progress:** ~50% of Phase 4 complete  
-**Overall Progress:** ~62% of entire migration
+**Progress:** ~52% of Phase 4 complete  
+**Overall Progress:** ~64% of entire migration
 
 **What's Working Now:**
 - ✅ Full authentication flow (login, signup, Google OAuth)
@@ -257,19 +262,20 @@
 - ✅ **Add/Edit Modals** - Person and Event forms with validation
 - ✅ **HelpModal** - Comprehensive 8-section help guide with sidebar navigation
 - ✅ **ExportModal** - PNG/PDF export with scale, orientation, paper size options
+- ✅ **PptxExportModal** - PowerPoint export with Timeline/Story modes, theme options
 - ✅ **ImportCSVModal** - CSV import for people/events with merge/replace modes, preview, deduplication
 - ✅ **GedcomImportModal** - Genealogy import with family relationships, marriage events, preview stats
 - ✅ Real-time Firebase sync
 - ✅ Save to Firestore
 - ✅ View switching (Horizontal ↔ Vertical ↔ Data)
-- ✅ Export to PNG/PDF from any view
+- ✅ Export to PNG/PDF/PowerPoint from any view
 - ✅ Import from CSV and GEDCOM with preview and validation
 
 **Next Steps:**
 1. Add remaining view modes (Flow, Thread, Subway, Tree, Radial, Gantt, Slide, Map, Report, Canvas)
 2. Create additional import modals (Google Sheets, Wikipedia, Extract from Text)
 3. Create Settings modal and category manager
-4. Create additional export modals (PPTX, ICS calendar, Narrative)
+4. Create additional export modals (ICS calendar, Narrative)
 
 **Dev Server:** Running at http://localhost:3000  
 **Status:** ✅ Compiles successfully, no errors  

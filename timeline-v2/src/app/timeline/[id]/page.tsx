@@ -9,7 +9,7 @@ import { Loading } from '@/components/shared';
 import { MenuBar, Toolbar } from '@/components/layout';
 import { HorizontalView, VerticalView, DataView } from '@/components/views';
 import { EventPanel, FilterPanel } from '@/components/panels';
-import { AddPersonModal, AddEventModal, EditPersonModal, EditEventModal, HelpModal, ExportModal, ImportCSVModal, GedcomImportModal } from '@/components/modals';
+import { AddPersonModal, AddEventModal, EditPersonModal, EditEventModal, HelpModal, ExportModal, ImportCSVModal, GedcomImportModal, PptxExportModal } from '@/components/modals';
 import type { Timeline } from '@/lib/types';
 
 export default function TimelinePage() {
@@ -90,6 +90,7 @@ export default function TimelinePage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showExport, setShowExport] = useState(false);
+  const [showExportPptx, setShowExportPptx] = useState(false);
   const [showImportCSV, setShowImportCSV] = useState(false);
   const [showImportGedcom, setShowImportGedcom] = useState(false);
   const [hiddenPeople, setHiddenPeople] = useState<Set<string>>(new Set());
@@ -191,6 +192,9 @@ export default function TimelinePage() {
       case 'exportPng':
       case 'exportPdf':
         setShowExport(true);
+        break;
+      case 'exportPptx':
+        setShowExportPptx(true);
         break;
       case 'importCsv':
         setShowImportCSV(true);
@@ -302,6 +306,12 @@ export default function TimelinePage() {
       <ExportModal
         isOpen={showExport}
         onClose={() => setShowExport(false)}
+        currentView={currentView}
+      />
+
+      <PptxExportModal
+        isOpen={showExportPptx}
+        onClose={() => setShowExportPptx(false)}
         currentView={currentView}
       />
 
