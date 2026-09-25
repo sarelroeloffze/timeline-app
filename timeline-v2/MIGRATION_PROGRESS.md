@@ -87,7 +87,7 @@
 
 ---
 
-### 🚧 Phase 4: Components Migration (In Progress - ~90% Complete)
+### 🚧 Phase 4: Components Migration (In Progress - ~95% Complete)
 
 **Progress:**
 - [x] Shared UI components (Button, Input, Modal, Loading)
@@ -98,7 +98,7 @@
 - [x] View mode components (13 of 13) - ALL COMPLETE ✅✅✅
   - Horizontal, Vertical, Data, Flow, Thread, Map, Report, Slide, Canvas, Gantt, Tree, Radial, Subway
 - [x] Panel components (2 of 3) - EventPanel, FilterPanel ✅
-- [x] Modal components (16 of 20) - All core modals + Settings/Share/CategoryManager/FieldDefs/BgSettings/EraEditor/Markers ✅
+- [x] Modal components (22 of 22) - ALL MODALS COMPLETE ✅✅✅
 
 **Completed Components (36):**
 
@@ -308,21 +308,61 @@
      - Line style (solid/dashed/dotted)
      - Label position (top/bottom)
      - Built-in "Today" marker
+   - `VersionHistoryModal.tsx` (313 lines) - Version snapshots
+     - Two-panel layout (list + preview)
+     - Create named snapshots
+     - Inline label editing
+     - Auto vs Named badge display
+     - Relative time formatting
+     - Version restore with confirmation
+     - Delete named snapshots
+   - `APIModal.tsx` (335 lines) - API keys and webhooks
+     - Two-tab interface (API Keys / Webhooks)
+     - Generate new API keys with name
+     - One-time key display with copy
+     - Revoke keys with confirmation
+     - Register webhooks with URL and secret
+     - Signed/unsigned badge for webhooks
+   - `GoogleSheetsModal.tsx` (300 lines) - Google Sheets sync
+     - 3-step wizard: URL → Mapping → Complete
+     - Sheet type selector (Events/People)
+     - Auto-detect column mapping
+     - Preview table (first 3 rows)
+     - Import mode (merge/replace)
+     - Auto-sync interval selector
+   - `WikiImportModal.tsx` (382 lines) - Wikipedia import
+     - 3-step wizard: URL/topic → Review → Complete
+     - 13 Wikipedia language options
+     - AI extraction of people and events
+     - Checkbox selection with select/deselect all
+     - Article title with link back to Wikipedia
+   - `ExtractModal.tsx` (284 lines) - Extract from text
+     - 3-step wizard: Paste → Review → Complete
+     - AI extraction from any text
+     - Checkbox selection with select/deselect all
+     - Empty state messages
+   - `NarrativeModal.tsx` (215 lines) - Generate narrative export
+     - 4 tone options (Academic/Narrative/Journalistic/Simple)
+     - 3 length options (Brief/Standard/Detailed)
+     - 3 focus options (All/People/Events)
+     - 4 language options
+     - Markdown-lite renderer
+     - Copy to clipboard and download .txt
 
 **Remaining Work:**
 
 **View Components (0 remaining of 13):** ✅ ALL 13 VIEWS COMPLETE! 
 - ✅ HorizontalView, ✅ VerticalView, ✅ DataView, ✅ FlowView, ✅ ThreadView, ✅ MapView, ✅ ReportView, ✅ SlideView, ✅ CanvasView, ✅ GanttView, ✅ TreeView, ✅ RadialView, ✅ SubwayView
 
-**Panel Components (3):** EventPanel, FilterPanel, LeftSidebar
+**Panel Components (3):** ✅ EventPanel, ✅ FilterPanel, LeftSidebar
 
-**Modal Components (20 total, 16 complete):**
+**Modal Components (22 total):** ✅ ALL 22 MODALS COMPLETE!
 - Person: ✅ AddPersonModal, ✅ EditPersonModal
 - Event: ✅ AddEventModal, ✅ EditEventModal
-- Data: ✅ ImportCSVModal, ✅ GedcomImportModal, GoogleSheetsModal, WikiImportModal, ExtractModal
-- Export: ✅ ExportModal (PNG/PDF), ✅ PptxExportModal, NarrativeModal
+- Data: ✅ ImportCSVModal, ✅ GedcomImportModal, ✅ GoogleSheetsModal, ✅ WikiImportModal, ✅ ExtractModal
+- Export: ✅ ExportModal (PNG/PDF), ✅ PptxExportModal, ✅ NarrativeModal
 - Settings: ✅ SettingsModal, ✅ ShareModal, ✅ CategoryManagerModal, ✅ FieldDefsModal, ✅ BgSettingsModal, ✅ EraEditorModal, ✅ MarkersModal
-- Misc: ✅ HelpModal, VersionHistoryModal, APIModal
+- Misc: ✅ HelpModal, ✅ VersionHistoryModal, ✅ APIModal
 
 ---
 
