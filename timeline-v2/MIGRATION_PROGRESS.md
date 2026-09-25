@@ -439,11 +439,14 @@
 ### ⏳ Phase 7: Testing & Feature Parity (In Progress - 10%)
 - [x] Build verification - Next.js build succeeds without errors
 - [x] Dev server compatibility - Tauri configured to use Next.js dev mode
+- [ ] **Prerequisites**: Install Rust toolchain for Tauri desktop builds (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`)
+- [ ] Next.js dev server testing - Start dev server and verify routes work
 - [ ] Component rendering - Test all 49 components render without errors
 - [ ] Test all 13 view modes - Verify each view displays correctly
 - [ ] Test all import/export formats - CSV, GEDCOM, JSON, PNG, PDF, PPTX, ICS
 - [ ] Test real-time Firebase sync - Verify Firestore subscriptions work
 - [ ] Test offline mode - IndexedDB persistence
+- [ ] Tauri desktop build - Full desktop app compilation (requires Rust)
 - [ ] Cross-platform testing (Windows, Mac, Linux)
 
 **Build Status:**
