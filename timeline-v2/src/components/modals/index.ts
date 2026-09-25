@@ -10,3 +10,4 @@ export * from './PptxExportModal';
 export * from './SettingsModal';
 export * from './ShareModal';
 export * from './CategoryManagerModal';
+export * from './FieldDefsModal';
