@@ -12,3 +12,4 @@ export * from './ShareModal';
 export * from './CategoryManagerModal';
 export * from './FieldDefsModal';
 export * from './BgSettingsModal';
+export * from './EraEditorModal';
