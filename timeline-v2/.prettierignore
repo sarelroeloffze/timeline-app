@@ -1,0 +1,26 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.*
+
+# Build outputs
+.next
+out
+dist
+build
+
+# Tauri
+src-tauri/target
+src-tauri/Cargo.lock
+
+# Misc
+*.md
+*.log
+.DS_Store
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Git
+.git
+.gitignore
